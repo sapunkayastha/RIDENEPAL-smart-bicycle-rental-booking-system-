@@ -1,0 +1,21 @@
+# RIDENEPAL
+
+> Smart bicycle rental and booking platform for Nepal — book premium bikes, track rides with live GPS, and earn rewards.
+
+RIDENEPAL lets riders browse a curated fleet of electric, mountain, touring, and city bicycles, book them online, pay securely via eSewa, and share live ride locations during their trips.
+
+## Pages
+
+- [Home](/): Overview of RIDENEPAL, featured bikes, and how the service works.
+- [Fleet](/fleet): Browse available bicycles with daily pricing and book a rental.
+- [Bike](/bike): Featured bike highlight and specifications.
+- [Community](/community): Stories and group rides from the RIDENEPAL community.
+- [Gallery](/gallery): Social feed of ride photos shared by riders.
+- [Rewards](/rewards): Loyalty tiers, points, and redemption catalog.
+- [Bulk Rent](/bulk-rent): Group and corporate rental quotes with tiered discounts.
+- [Extend](/extend): Add extra hours to an active rental.
+- [Payment](/payment): Supported payment methods (eSewa, Khalti, Stripe).
+
+## Optional
+
+- [Sign in](/auth): Email/password or Google sign-in.

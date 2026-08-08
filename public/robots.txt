@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /auth
+Disallow: /dashboard
+Disallow: /checkout
+Disallow: /track
+Disallow: /payment-return
+Disallow: /chat
+
+Sitemap: https://ridenepal.com/sitemap.xml
