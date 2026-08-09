@@ -12,18 +12,4 @@ export const markOtpVerified = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const getMyRole = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { data, error } = await context.supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId);
-    if (error) throw new Error(error.message);
-    const roles = (data ?? []).map((r) => r.role);
-    return {
-      roles,
-      isSuperAdmin: roles.includes("super_admin"),
-      isCustomer: roles.includes("customer"),
-    };
-  });
+export { getMyAccess as getMyRole } from "@/lib/admin.functions";

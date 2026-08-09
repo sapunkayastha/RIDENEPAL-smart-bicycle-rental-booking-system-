@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
 import { markOtpVerified } from "@/lib/otp.functions";
+import { resolveAuthenticatedHomePath } from "@/lib/auth-navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -62,14 +63,14 @@ function VerifyOtpPage() {
         .eq("id", data.user.id)
         .maybeSingle();
       if (profile?.otp_verified) {
-        navigate({ to: "/dashboard" });
+        navigate({ to: await resolveAuthenticatedHomePath() });
         return;
       }
       if (cameFromMagicLink) {
         // Clicking the link IS the verification — no need to also type the code.
         await mark({});
         toast.success("Verified! Welcome to RIDENEPAL.");
-        navigate({ to: "/dashboard" });
+        navigate({ to: await resolveAuthenticatedHomePath() });
         return;
       }
       // Auto-send only if we haven't already sent one recently (covers
@@ -118,7 +119,7 @@ function VerifyOtpPage() {
       if (error) throw error;
       await mark({});
       toast.success("Verified! Welcome to RIDENEPAL.");
-      navigate({ to: "/dashboard" });
+      navigate({ to: await resolveAuthenticatedHomePath() });
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Invalid code");

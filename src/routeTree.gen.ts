@@ -13,7 +13,6 @@ import { Route as VerifyOtpRouteImport } from './routes/verify-otp'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as RewardsRouteImport } from './routes/rewards'
 import { Route as PaymentReturnRouteImport } from './routes/payment-return'
-import { Route as PaymentRouteImport } from './routes/payment'
 import { Route as OtpRouteImport } from './routes/otp'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as GalleryRouteImport } from './routes/gallery'
@@ -51,11 +50,6 @@ const RewardsRoute = RewardsRouteImport.update({
 const PaymentReturnRoute = PaymentReturnRouteImport.update({
   id: '/payment-return',
   path: '/payment-return',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PaymentRoute = PaymentRouteImport.update({
-  id: '/payment',
-  path: '/payment',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OtpRoute = OtpRouteImport.update({
@@ -160,7 +154,6 @@ export interface FileRoutesByFullPath {
   '/gallery': typeof GalleryRoute
   '/onboarding': typeof OnboardingRoute
   '/otp': typeof OtpRoute
-  '/payment': typeof PaymentRoute
   '/payment-return': typeof PaymentReturnRoute
   '/rewards': typeof RewardsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -183,7 +176,6 @@ export interface FileRoutesByTo {
   '/gallery': typeof GalleryRoute
   '/onboarding': typeof OnboardingRoute
   '/otp': typeof OtpRoute
-  '/payment': typeof PaymentRoute
   '/payment-return': typeof PaymentReturnRoute
   '/rewards': typeof RewardsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -208,7 +200,6 @@ export interface FileRoutesById {
   '/gallery': typeof GalleryRoute
   '/onboarding': typeof OnboardingRoute
   '/otp': typeof OtpRoute
-  '/payment': typeof PaymentRoute
   '/payment-return': typeof PaymentReturnRoute
   '/rewards': typeof RewardsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -234,7 +225,6 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/onboarding'
     | '/otp'
-    | '/payment'
     | '/payment-return'
     | '/rewards'
     | '/sitemap.xml'
@@ -257,7 +247,6 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/onboarding'
     | '/otp'
-    | '/payment'
     | '/payment-return'
     | '/rewards'
     | '/sitemap.xml'
@@ -281,7 +270,6 @@ export interface FileRouteTypes {
     | '/gallery'
     | '/onboarding'
     | '/otp'
-    | '/payment'
     | '/payment-return'
     | '/rewards'
     | '/sitemap.xml'
@@ -307,7 +295,6 @@ export interface RootRouteChildren {
   GalleryRoute: typeof GalleryRoute
   OnboardingRoute: typeof OnboardingRoute
   OtpRoute: typeof OtpRoute
-  PaymentRoute: typeof PaymentRoute
   PaymentReturnRoute: typeof PaymentReturnRoute
   RewardsRoute: typeof RewardsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -344,13 +331,6 @@ declare module '@tanstack/react-router' {
       path: '/payment-return'
       fullPath: '/payment-return'
       preLoaderRoute: typeof PaymentReturnRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/payment': {
-      id: '/payment'
-      path: '/payment'
-      fullPath: '/payment'
-      preLoaderRoute: typeof PaymentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/otp': {
@@ -526,7 +506,6 @@ const rootRouteChildren: RootRouteChildren = {
   GalleryRoute: GalleryRoute,
   OnboardingRoute: OnboardingRoute,
   OtpRoute: OtpRoute,
-  PaymentRoute: PaymentRoute,
   PaymentReturnRoute: PaymentReturnRoute,
   RewardsRoute: RewardsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,

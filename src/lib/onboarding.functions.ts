@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { homePathForRoles } from "@/lib/roles";
 
 export const completeCustomerOnboarding = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -43,13 +44,11 @@ export const completeCustomerOnboarding = createServerFn({ method: "POST" })
       .eq("id", context.userId)
       .maybeSingle();
 
-    const isSuperAdmin = existing.includes("super_admin");
     const otpVerified = Boolean(profile?.otp_verified);
 
     return {
       roles: existing,
-      isSuperAdmin,
       otpVerified,
-      next: otpVerified ? (isSuperAdmin ? "/admin" : "/dashboard") : "/verify-otp",
+      next: otpVerified ? homePathForRoles(existing) : "/verify-otp",
     };
   });

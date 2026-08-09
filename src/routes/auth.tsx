@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Bike } from "lucide-react";
+import { resolveAuthenticatedHomePath } from "@/lib/auth-navigation";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -21,8 +22,8 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard" });
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (data.session) navigate({ to: await resolveAuthenticatedHomePath() });
     });
   }, [navigate]);
 
@@ -49,7 +50,7 @@ function AuthPage() {
       if (u.user) {
         await supabase.from("profiles").update({ otp_verified: true }).eq("id", u.user.id);
       }
-      navigate({ to: "/dashboard" });
+      navigate({ to: await resolveAuthenticatedHomePath() });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -123,6 +124,12 @@ return (
           <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="text-primary font-medium hover:underline">
             {mode === "signin" ? "Sign up" : "Sign in"}
           </button>
+        </p>
+        <p className="text-center text-xs text-muted-foreground mt-4 px-2">
+          Staff and customer accounts use the same sign-in. After login,{" "}
+          <span className="text-foreground">customers</span> go to the dashboard;{" "}
+          <span className="text-foreground">admins</span> and{" "}
+          <span className="text-foreground">super admins</span> go to the admin console.
         </p>
         <p className="text-center text-xs text-muted-foreground mt-2">
           Renting for the first time?{" "}

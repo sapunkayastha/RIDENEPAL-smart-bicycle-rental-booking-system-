@@ -4,14 +4,14 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { amISuperAdmin } from "@/lib/admin.functions";
+import { amIStaff } from "@/lib/admin.functions";
 
 export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
   const { user, signOut } = useAuth();
-  const checkAdmin = useServerFn(amISuperAdmin);
-  const { data: adminData } = useQuery({
-    queryKey: ["is-super-admin", user?.id],
-    queryFn: () => checkAdmin(),
+  const checkStaff = useServerFn(amIStaff);
+  const { data: staffAccess } = useQuery({
+    queryKey: ["is-staff", user?.id],
+    queryFn: () => checkStaff(),
     enabled: Boolean(user),
   });
 
@@ -34,9 +34,9 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
           <Link to="/gallery" className={linkCls}>Gallery</Link>
           <Link to="/rewards" className={linkCls}>Rewards</Link>
           {user && <Link to="/dashboard" className={linkCls}>Dashboard</Link>}
-          {adminData?.isSuperAdmin && (
+          {staffAccess?.isStaff && (
             <Link to="/admin" className={`${linkCls} flex items-center gap-1 font-semibold`}>
-              <ShieldCheck className="size-4" /> Admin
+              <ShieldCheck className="size-4" /> {staffAccess.isSuperAdmin ? "Super Admin" : "Admin"}
             </Link>
           )}
 
