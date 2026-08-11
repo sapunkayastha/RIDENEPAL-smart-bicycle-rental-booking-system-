@@ -25,11 +25,13 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BikeBikeIdRouteImport } from './routes/bike.$bikeId'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/_admin/route'
 import { Route as AuthenticatedTrackBookingIdRouteImport } from './routes/_authenticated/track.$bookingId'
 import { Route as AuthenticatedExtendBookingIdRouteImport } from './routes/_authenticated/extend.$bookingId'
 import { Route as AuthenticatedCheckoutBookingIdRouteImport } from './routes/_authenticated/checkout.$bookingId'
+import { Route as AuthenticatedAdminMessagesRouteImport } from './routes/_authenticated/_admin/messages'
 import { Route as AuthenticatedAdminAdminRouteImport } from './routes/_authenticated/_admin/admin'
 
 const VerifyOtpRoute = VerifyOtpRouteImport.update({
@@ -111,6 +113,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -138,6 +145,12 @@ const AuthenticatedCheckoutBookingIdRoute =
     path: '/checkout/$bookingId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminMessagesRoute =
+  AuthenticatedAdminMessagesRouteImport.update({
+    id: '/messages',
+    path: '/messages',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminAdminRoute = AuthenticatedAdminAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -159,9 +172,11 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/api/chat': typeof ApiChatRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
+  '/messages': typeof AuthenticatedAdminMessagesRoute
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
@@ -181,9 +196,11 @@ export interface FileRoutesByTo {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/api/chat': typeof ApiChatRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
+  '/messages': typeof AuthenticatedAdminMessagesRoute
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
@@ -206,9 +223,11 @@ export interface FileRoutesById {
   '/verify-otp': typeof VerifyOtpRoute
   '/_authenticated/_admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/api/chat': typeof ApiChatRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/_authenticated/_admin/admin': typeof AuthenticatedAdminAdminRoute
+  '/_authenticated/_admin/messages': typeof AuthenticatedAdminMessagesRoute
   '/_authenticated/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/_authenticated/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/_authenticated/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
@@ -230,9 +249,11 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/verify-otp'
     | '/dashboard'
+    | '/profile'
     | '/api/chat'
     | '/bike/$bikeId'
     | '/admin'
+    | '/messages'
     | '/checkout/$bookingId'
     | '/extend/$bookingId'
     | '/track/$bookingId'
@@ -252,9 +273,11 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/verify-otp'
     | '/dashboard'
+    | '/profile'
     | '/api/chat'
     | '/bike/$bikeId'
     | '/admin'
+    | '/messages'
     | '/checkout/$bookingId'
     | '/extend/$bookingId'
     | '/track/$bookingId'
@@ -276,9 +299,11 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/_authenticated/_admin'
     | '/_authenticated/dashboard'
+    | '/_authenticated/profile'
     | '/api/chat'
     | '/bike/$bikeId'
     | '/_authenticated/_admin/admin'
+    | '/_authenticated/_admin/messages'
     | '/_authenticated/checkout/$bookingId'
     | '/_authenticated/extend/$bookingId'
     | '/_authenticated/track/$bookingId'
@@ -417,6 +442,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -452,6 +484,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCheckoutBookingIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/_admin/messages': {
+      id: '/_authenticated/_admin/messages'
+      path: '/messages'
+      fullPath: '/messages'
+      preLoaderRoute: typeof AuthenticatedAdminMessagesRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/_admin/admin': {
       id: '/_authenticated/_admin/admin'
       path: '/admin'
@@ -464,11 +503,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminAdminRoute: typeof AuthenticatedAdminAdminRoute
+  AuthenticatedAdminMessagesRoute: typeof AuthenticatedAdminMessagesRoute
 }
 
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
   {
     AuthenticatedAdminAdminRoute: AuthenticatedAdminAdminRoute,
+    AuthenticatedAdminMessagesRoute: AuthenticatedAdminMessagesRoute,
   }
 
 const AuthenticatedAdminRouteRouteWithChildren =
@@ -479,6 +520,7 @@ const AuthenticatedAdminRouteRouteWithChildren =
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedCheckoutBookingIdRoute: typeof AuthenticatedCheckoutBookingIdRoute
   AuthenticatedExtendBookingIdRoute: typeof AuthenticatedExtendBookingIdRoute
   AuthenticatedTrackBookingIdRoute: typeof AuthenticatedTrackBookingIdRoute
@@ -487,6 +529,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedCheckoutBookingIdRoute: AuthenticatedCheckoutBookingIdRoute,
   AuthenticatedExtendBookingIdRoute: AuthenticatedExtendBookingIdRoute,
   AuthenticatedTrackBookingIdRoute: AuthenticatedTrackBookingIdRoute,

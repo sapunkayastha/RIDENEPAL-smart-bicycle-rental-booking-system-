@@ -1,10 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { amISuperAdmin, amIStaff, listCustomers, setUserRole } from "@/lib/admin.functions";
 import type { AppRole } from "@/lib/roles";
 import { roleLabel } from "@/lib/roles";
@@ -17,9 +23,15 @@ export const Route = createFileRoute("/_authenticated/_admin/admin")({
   head: () => ({
     meta: [
       { title: "Admin Console — RIDENEPAL" },
-      { name: "description", content: "Staff console to manage RIDENEPAL customers, admins, and account status." },
+      {
+        name: "description",
+        content: "Staff console to manage RIDENEPAL customers, admins, and account status.",
+      },
       { property: "og:title", content: "Admin Console — RIDENEPAL" },
-      { property: "og:description", content: "Manage RIDENEPAL customers, roles and account verification status." },
+      {
+        property: "og:description",
+        content: "Manage RIDENEPAL customers, roles and account verification status.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -81,9 +93,15 @@ function AdminDashboard() {
     <div className="min-h-screen bg-secondary/20">
       <SiteHeader />
       <main className="max-w-7xl mx-auto px-6 py-10">
-        <div className="flex items-center gap-2 mb-1">
-          <ShieldCheck className="size-5 text-primary" />
-          <h1 className="text-3xl font-bold">{consoleTitle}</h1>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-5 text-primary" />
+            <h1 className="text-3xl font-bold">Super Admin Console</h1>
+          </div>
+          <Link to="/messages" className="text-sm font-medium text-primary hover:underline">
+            {" "}
+            Support Inbox →{" "}
+          </Link>{" "}
         </div>
         <p className="text-muted-foreground mb-8">
           {canManageRoles
@@ -118,7 +136,11 @@ function AdminDashboard() {
         </div>
 
         <div className="mb-4 max-w-sm">
-          <Input placeholder="Search by email, name, phone, or role…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input
+            placeholder="Search by email, name, phone, or role…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
 
         {isLoading ? (
@@ -144,7 +166,9 @@ function AdminDashboard() {
                   <tr key={c.id} className="border-t">
                     <td className="px-4 py-3">
                       <div className="font-medium">{c.fullName ?? "—"}</div>
-                      <div className="text-xs text-muted-foreground">{c.email ?? c.id.slice(0, 8)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {c.email ?? c.id.slice(0, 8)}
+                      </div>
                       {c.phone && <div className="text-xs text-muted-foreground">{c.phone}</div>}
                     </td>
                     <td className="px-4 py-3">
@@ -177,7 +201,9 @@ function AdminDashboard() {
                         <Select
                           value={c.primaryRole}
                           disabled={roleMutation.isPending}
-                          onValueChange={(role) => roleMutation.mutate({ userId: c.id, role: role as AppRole })}
+                          onValueChange={(role) =>
+                            roleMutation.mutate({ userId: c.id, role: role as AppRole })
+                          }
                         >
                           <SelectTrigger className="h-8 text-xs">
                             <SelectValue />
@@ -194,7 +220,10 @@ function AdminDashboard() {
                 ))}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={canManageRoles ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
+                    <td
+                      colSpan={canManageRoles ? 7 : 6}
+                      className="px-4 py-8 text-center text-muted-foreground"
+                    >
                       No accounts found.
                     </td>
                   </tr>
@@ -209,17 +238,21 @@ function AdminDashboard() {
             <h2 className="font-semibold mb-2">How the three roles work</h2>
             <ul className="text-sm text-muted-foreground space-y-1 list-disc pl-5">
               <li>
-                <strong className="text-foreground">Customer</strong> — books bikes, tracks rides, uses rewards.
+                <strong className="text-foreground">Customer</strong> — books bikes, tracks rides,
+                uses rewards.
               </li>
               <li>
-                <strong className="text-foreground">Admin</strong> — opens this console to view accounts and activity.
+                <strong className="text-foreground">Admin</strong> — opens this console to view
+                accounts and activity.
               </li>
               <li>
-                <strong className="text-foreground">Super Admin</strong> — full console access plus changing user roles.
+                <strong className="text-foreground">Super Admin</strong> — full console access plus
+                changing user roles.
               </li>
             </ul>
             <p className="text-xs text-muted-foreground mt-3">
-              Create separate sign-in accounts in Supabase Auth, then assign each account the role you want here.
+              Create separate sign-in accounts in Supabase Auth, then assign each account the role
+              you want here.
             </p>
           </Card>
         )}

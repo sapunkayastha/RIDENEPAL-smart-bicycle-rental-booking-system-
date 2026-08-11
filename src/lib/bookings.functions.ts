@@ -5,12 +5,14 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 export const createBooking = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input) =>
-    z.object({
-      bike_id: z.string().uuid(),
-      start_date: z.string().datetime(),
-      end_date: z.string().datetime(),
-      pickup_location: z.string().max(255).optional(),
-    }).parse(input),
+    z
+      .object({
+        bike_id: z.string().uuid(),
+        start_date: z.string().datetime(),
+        end_date: z.string().datetime(),
+        pickup_location: z.string().max(255).optional(),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -51,6 +53,12 @@ export const createBooking = createServerFn({ method: "POST" })
       .select()
       .single();
     if (error) throw new Error(error.message);
+    const { notifyStaff } = await import("@/lib/notifications.functions");
+    await notifyStaff({
+      title: "New booking",
+      body: `A new booking was placed for NPR ${total_amount.toFixed(0)}.`,
+      link: "/admin",
+    });
     return booking;
   });
 
