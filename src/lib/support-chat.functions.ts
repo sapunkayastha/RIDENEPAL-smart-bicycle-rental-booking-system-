@@ -74,10 +74,7 @@ export const sendMySupportMessage = createServerFn({ method: "POST" })
 // restricts SELECT to super_admin; these additionally assert it so a bad
 // call fails with a clear error instead of just quietly returning nothing) ----
 
-async function assertStaff(supabase: any, userId: string) {
-  const { data } = await supabase.rpc("has_role", { _user_id: userId, _role: "super_admin" });
-  if (!data) throw new Error("Forbidden");
-}
+import { assertStaff } from "@/lib/server-roles";
 
 export const listSupportConversations = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
