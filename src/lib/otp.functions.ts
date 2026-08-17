@@ -11,5 +11,3 @@ export const markOtpVerified = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
-
-export { getMyAccess as getMyRole } from "@/lib/admin.functions";

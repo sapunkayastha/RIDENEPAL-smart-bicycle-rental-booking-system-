@@ -9,7 +9,9 @@
  * behavior keeps working even before that migration has been applied.
  */
 
-async function hasRole(supabase: any, userId: string, role: string): Promise<boolean> {
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+async function hasRole(supabase: SupabaseClient, userId: string, role: string): Promise<boolean> {
   try {
     const { data } = await supabase.rpc("has_role", { _user_id: userId, _role: role });
     return Boolean(data);
@@ -18,7 +20,7 @@ async function hasRole(supabase: any, userId: string, role: string): Promise<boo
   }
 }
 
-export async function getMyRoleFlags(supabase: any, userId: string) {
+export async function getMyRoleFlags(supabase: SupabaseClient, userId: string) {
   const [isSuperAdmin, isAdmin] = await Promise.all([
     hasRole(supabase, userId, "super_admin"),
     hasRole(supabase, userId, "admin"),
@@ -26,12 +28,12 @@ export async function getMyRoleFlags(supabase: any, userId: string) {
   return { isSuperAdmin, isAdmin, isStaff: isSuperAdmin || isAdmin };
 }
 
-export async function assertStaff(supabase: any, userId: string) {
+export async function assertStaff(supabase: SupabaseClient, userId: string) {
   const { isStaff } = await getMyRoleFlags(supabase, userId);
   if (!isStaff) throw new Error("Forbidden: staff only");
 }
 
-export async function assertSuperAdmin(supabase: any, userId: string) {
+export async function assertSuperAdmin(supabase: SupabaseClient, userId: string) {
   const { isSuperAdmin } = await getMyRoleFlags(supabase, userId);
   if (!isSuperAdmin) throw new Error("Forbidden: super_admin only");
 }

@@ -20,6 +20,7 @@ import { Route as FleetRouteImport } from './routes/fleet'
 import { Route as CommunityRouteImport } from './routes/community'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as BulkRentRouteImport } from './routes/bulk-rent'
+import { Route as AuthCallbackRouteImport } from './routes/auth-callback'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
@@ -31,6 +32,7 @@ import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authentic
 import { Route as AuthenticatedTrackBookingIdRouteImport } from './routes/_authenticated/track.$bookingId'
 import { Route as AuthenticatedExtendBookingIdRouteImport } from './routes/_authenticated/extend.$bookingId'
 import { Route as AuthenticatedCheckoutBookingIdRouteImport } from './routes/_authenticated/checkout.$bookingId'
+import { Route as AuthenticatedAdminTrackingRouteImport } from './routes/_authenticated/_admin/tracking'
 import { Route as AuthenticatedAdminMessagesRouteImport } from './routes/_authenticated/_admin/messages'
 import { Route as AuthenticatedAdminAdminRouteImport } from './routes/_authenticated/_admin/admin'
 
@@ -89,6 +91,11 @@ const BulkRentRoute = BulkRentRouteImport.update({
   path: '/bulk-rent',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth-callback',
+  path: '/auth-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -145,6 +152,12 @@ const AuthenticatedCheckoutBookingIdRoute =
     path: '/checkout/$bookingId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminTrackingRoute =
+  AuthenticatedAdminTrackingRouteImport.update({
+    id: '/tracking',
+    path: '/tracking',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminMessagesRoute =
   AuthenticatedAdminMessagesRouteImport.update({
     id: '/messages',
@@ -160,6 +173,7 @@ const AuthenticatedAdminAdminRoute = AuthenticatedAdminAdminRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/auth-callback': typeof AuthCallbackRoute
   '/bulk-rent': typeof BulkRentRoute
   '/chat': typeof ChatRoute
   '/community': typeof CommunityRoute
@@ -177,6 +191,7 @@ export interface FileRoutesByFullPath {
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
   '/messages': typeof AuthenticatedAdminMessagesRoute
+  '/tracking': typeof AuthenticatedAdminTrackingRoute
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
@@ -184,6 +199,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/auth-callback': typeof AuthCallbackRoute
   '/bulk-rent': typeof BulkRentRoute
   '/chat': typeof ChatRoute
   '/community': typeof CommunityRoute
@@ -201,6 +217,7 @@ export interface FileRoutesByTo {
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
   '/messages': typeof AuthenticatedAdminMessagesRoute
+  '/tracking': typeof AuthenticatedAdminTrackingRoute
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
@@ -210,6 +227,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/auth-callback': typeof AuthCallbackRoute
   '/bulk-rent': typeof BulkRentRoute
   '/chat': typeof ChatRoute
   '/community': typeof CommunityRoute
@@ -228,6 +246,7 @@ export interface FileRoutesById {
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/_authenticated/_admin/admin': typeof AuthenticatedAdminAdminRoute
   '/_authenticated/_admin/messages': typeof AuthenticatedAdminMessagesRoute
+  '/_authenticated/_admin/tracking': typeof AuthenticatedAdminTrackingRoute
   '/_authenticated/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/_authenticated/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/_authenticated/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
@@ -237,6 +256,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/auth-callback'
     | '/bulk-rent'
     | '/chat'
     | '/community'
@@ -254,6 +274,7 @@ export interface FileRouteTypes {
     | '/bike/$bikeId'
     | '/admin'
     | '/messages'
+    | '/tracking'
     | '/checkout/$bookingId'
     | '/extend/$bookingId'
     | '/track/$bookingId'
@@ -261,6 +282,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/auth-callback'
     | '/bulk-rent'
     | '/chat'
     | '/community'
@@ -278,6 +300,7 @@ export interface FileRouteTypes {
     | '/bike/$bikeId'
     | '/admin'
     | '/messages'
+    | '/tracking'
     | '/checkout/$bookingId'
     | '/extend/$bookingId'
     | '/track/$bookingId'
@@ -286,6 +309,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/auth-callback'
     | '/bulk-rent'
     | '/chat'
     | '/community'
@@ -304,6 +328,7 @@ export interface FileRouteTypes {
     | '/bike/$bikeId'
     | '/_authenticated/_admin/admin'
     | '/_authenticated/_admin/messages'
+    | '/_authenticated/_admin/tracking'
     | '/_authenticated/checkout/$bookingId'
     | '/_authenticated/extend/$bookingId'
     | '/_authenticated/track/$bookingId'
@@ -313,6 +338,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   BulkRentRoute: typeof BulkRentRoute
   ChatRoute: typeof ChatRoute
   CommunityRoute: typeof CommunityRoute
@@ -407,6 +433,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BulkRentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth-callback': {
+      id: '/auth-callback'
+      path: '/auth-callback'
+      fullPath: '/auth-callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -484,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCheckoutBookingIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/_admin/tracking': {
+      id: '/_authenticated/_admin/tracking'
+      path: '/tracking'
+      fullPath: '/tracking'
+      preLoaderRoute: typeof AuthenticatedAdminTrackingRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/_admin/messages': {
       id: '/_authenticated/_admin/messages'
       path: '/messages'
@@ -504,12 +544,14 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminAdminRoute: typeof AuthenticatedAdminAdminRoute
   AuthenticatedAdminMessagesRoute: typeof AuthenticatedAdminMessagesRoute
+  AuthenticatedAdminTrackingRoute: typeof AuthenticatedAdminTrackingRoute
 }
 
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
   {
     AuthenticatedAdminAdminRoute: AuthenticatedAdminAdminRoute,
     AuthenticatedAdminMessagesRoute: AuthenticatedAdminMessagesRoute,
+    AuthenticatedAdminTrackingRoute: AuthenticatedAdminTrackingRoute,
   }
 
 const AuthenticatedAdminRouteRouteWithChildren =
@@ -542,6 +584,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   BulkRentRoute: BulkRentRoute,
   ChatRoute: ChatRoute,
   CommunityRoute: CommunityRoute,

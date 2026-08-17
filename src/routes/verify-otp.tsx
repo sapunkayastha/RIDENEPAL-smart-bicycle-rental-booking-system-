@@ -1,9 +1,8 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { markOtpVerified } from "@/lib/otp.functions";
-import { resolveAuthenticatedHomePath } from "@/lib/auth-navigation";
+import { me, verifyOtpCode, sendOtp, logout } from "@/lib/auth.functions";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -16,116 +15,62 @@ export const Route = createFileRoute("/verify-otp")({
   head: () => ({ meta: [{ title: "Verify Email — RIDENEPAL" }] }),
 });
 
-// Don't re-send within this window — avoids burning Supabase's email rate limit
-// every time this page mounts (redirect back here, refresh, etc).
-const RESEND_COOLDOWN_MS = 60_000;
-const OTP_LENGTH = 6; // matches this Supabase project's Email OTP length setting
-const LAST_SENT_KEY = "ridenepal:otp-last-sent";
+const OTP_LENGTH = 6;
 
 function VerifyOtpPage() {
   const navigate = useNavigate();
-  const mark = useServerFn(markOtpVerified);
-  const [email, setEmail] = useState<string>("");
+  const fetchMe = useServerFn(me);
+  const verify = useServerFn(verifyOtpCode);
+  const resend = useServerFn(sendOtp);
+  const doLogout = useServerFn(logout);
+
   const [code, setCode] = useState("");
-  const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
+  const [sending, setSending] = useState(false);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
-    return () => clearInterval(t);
-  }, [cooldown]);
-
-  function msSinceLastSend() {
-    const raw = sessionStorage.getItem(LAST_SENT_KEY);
-    if (!raw) return Infinity;
-    return Date.now() - Number(raw);
-  }
-
-  useEffect(() => {
-    // If this page load came from clicking the emailed magic link (rather
-    // than typing the code manually), Supabase has already authenticated
-    // the session — capture that signal before the SDK consumes the hash.
-    const cameFromMagicLink =
-      /type=magiclink/.test(window.location.hash) || /access_token=/.test(window.location.hash);
-
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (!data.user) {
-        navigate({ to: "/auth" });
-        return;
-      }
-      setEmail(data.user.email ?? "");
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("otp_verified")
-        .eq("id", data.user.id)
-        .maybeSingle();
-      if (profile?.otp_verified) {
-        navigate({ to: await resolveAuthenticatedHomePath() });
-        return;
-      }
-      if (cameFromMagicLink) {
-        // Clicking the link IS the verification — no need to also type the code.
-        await mark({});
-        toast.success("Verified! Welcome to RIDENEPAL.");
-        navigate({ to: await resolveAuthenticatedHomePath() });
-        return;
-      }
-      // Auto-send only if we haven't already sent one recently (covers
-      // remounts from redirects/refreshes, not just repeated button clicks).
-      const elapsed = msSinceLastSend();
-      if (elapsed >= RESEND_COOLDOWN_MS) {
-        await sendCode(data.user.email ?? "");
-      } else {
-        setCooldown(Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000));
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function sendCode(target: string) {
-    if (!target || cooldown > 0) return;
-    setSending(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: target,
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: `${window.location.origin}/verify-otp`,
-        },
-      });
-      if (error) throw error;
-      sessionStorage.setItem(LAST_SENT_KEY, String(Date.now()));
-      setCooldown(RESEND_COOLDOWN_MS / 1000);
-      toast.success(`Verification code sent to ${target}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not send code");
-    } finally {
-      setSending(false);
-    }
-  }
+  const { data: user, isLoading } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => fetchMe(),
+    retry: false,
+  });
 
   async function handleVerify() {
     if (code.length !== OTP_LENGTH) return;
     setVerifying(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: code,
-        type: "email",
-      });
-      if (error) throw error;
-      await mark({});
+      await verify({ data: { code } });
       toast.success("Verified! Welcome to RIDENEPAL.");
-      navigate({ to: await resolveAuthenticatedHomePath() });
+      navigate({ to: "/dashboard" });
     } catch (err) {
-      console.error(err);
       toast.error(err instanceof Error ? err.message : "Invalid code");
     } finally {
       setVerifying(false);
     }
+  }
+
+  async function handleResend() {
+    setSending(true);
+    try {
+      await resend();
+      toast.success("New code sent — check your server console.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not resend code");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!user) {
+    navigate({ to: "/auth" });
+    return null;
   }
 
   return (
@@ -141,16 +86,19 @@ function VerifyOtpPage() {
           </div>
         </div>
         <h1 className="text-2xl font-bold text-center">Verify your email</h1>
-        <p className="text-sm text-muted-foreground text-center mt-1 mb-6">
-          We sent a verification code to{" "}
-          <span className="font-medium text-foreground">{email || "your email"}</span>.
-          <br />
-          Enter it below to finish signing in.
+        <p className="text-sm text-muted-foreground text-center mt-1 mb-2">
+          Enter the 6-digit code for{" "}
+          <span className="font-medium text-foreground">{user.email}</span>.
+        </p>
+        <p className="text-xs text-muted-foreground text-center mb-6">
+          (Dev mode: check your server terminal for the code — search for "🔐 [DEV OTP]")
         </p>
         <div className="flex justify-center mb-5">
           <InputOTP maxLength={OTP_LENGTH} value={code} onChange={setCode}>
             <InputOTPGroup>
-              {Array.from({ length: OTP_LENGTH }, (_, i) => <InputOTPSlot key={i} index={i} />)}
+              {Array.from({ length: OTP_LENGTH }, (_, i) => (
+                <InputOTPSlot key={i} index={i} />
+              ))}
             </InputOTPGroup>
           </InputOTP>
         </div>
@@ -162,14 +110,17 @@ function VerifyOtpPage() {
           {verifying ? "Verifying…" : "Verify & Continue"}
         </Button>
         <button
-          onClick={() => sendCode(email)}
-          disabled={sending || cooldown > 0}
+          onClick={handleResend}
+          disabled={sending}
           className="w-full text-xs text-muted-foreground mt-3 hover:text-foreground disabled:opacity-50"
         >
-          {sending ? "Sending…" : cooldown > 0 ? `Resend available in ${cooldown}s` : "Didn't get a code? Resend"}
+          {sending ? "Sending…" : "Didn't get a code? Resend"}
         </button>
         <button
-          onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/auth" }); }}
+          onClick={async () => {
+            await doLogout();
+            navigate({ to: "/auth" });
+          }}
           className="w-full text-xs text-muted-foreground mt-2 hover:text-foreground"
         >
           Use a different account
