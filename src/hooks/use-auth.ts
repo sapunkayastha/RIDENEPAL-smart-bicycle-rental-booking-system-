@@ -1,24 +1,31 @@
-import { useEffect, useState } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useNavigate } from "@tanstack/react-router";
+import { me, logout as logoutFn } from "@/lib/auth.functions";
 
 export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const fetchMe = useServerFn(me);
+  const doLogout = useServerFn(logoutFn);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-    });
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setUser(data.session?.user ?? null);
-      setLoading(false);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
+  const { data: user, isLoading } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => fetchMe(),
+    retry: false,
+    // Not being logged in is a normal, expected state — don't treat it as an error.
+    throwOnError: false,
+  });
 
-  return { session, user, loading, signOut: () => supabase.auth.signOut() };
+  async function signOut() {
+    await doLogout();
+    queryClient.invalidateQueries({ queryKey: ["me"] });
+    navigate({ to: "/auth" });
+  }
+
+  return {
+    user: user ?? null,
+    loading: isLoading,
+    signOut,
+  };
 }

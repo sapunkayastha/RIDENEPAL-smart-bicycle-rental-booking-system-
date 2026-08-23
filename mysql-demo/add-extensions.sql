@@ -1,0 +1,15 @@
+USE ridenepal;
+
+CREATE TABLE IF NOT EXISTS booking_extensions (
+  id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+  booking_id CHAR(36) NOT NULL,
+  user_id CHAR(36) NOT NULL,
+  hours INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'pending',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS extension_id CHAR(36) NULL;

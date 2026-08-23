@@ -1,5 +1,4 @@
-import { useEffect } from "react";
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -9,7 +8,6 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { AiChatBubble } from "@/components/ai-chat-bubble";
 
 import appCss from "../styles.css?url";
@@ -57,14 +55,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Try again
+            Try againh
           </button>
-          <a
-            href="/"
+          <Link
+            to="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
             Go home
-          </a>
+          </Link>
         </div>
       </div>
     </div>
@@ -77,15 +75,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "RideNepal — Smart Bicycle Rental & Booking" },
-      { name: "description", content: "Rent premium bikes anywhere across Nepal. Smart booking, live GPS tracking, rewards." },
+      {
+        name: "description",
+        content:
+          "Rent premium bikes anywhere across Nepal. Smart booking, live GPS tracking, rewards.",
+      },
       { name: "author", content: "RideNepal" },
       { property: "og:title", content: "RideNepal — Smart Bicycle Rental & Booking" },
-      { property: "og:description", content: "Rent premium bikes anywhere across Nepal. Smart booking, live GPS tracking, rewards." },
+      {
+        property: "og:description",
+        content:
+          "Rent premium bikes anywhere across Nepal. Smart booking, live GPS tracking, rewards.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "RideNepal — Smart Bicycle Rental & Booking" },
-      { name: "twitter:description", content: "Rent premium bikes anywhere across Nepal. Smart booking, live GPS tracking, rewards." },
-      // TODO: replace with your own hosted OG image (e.g. /og-image.png in `public/`)
+      {
+        name: "twitter:description",
+        content:
+          "Rent premium bikes anywhere across Nepal. Smart booking, live GPS tracking, rewards.",
+      },
       { property: "og:image", content: "https://ridenepal.com/og-image.png" },
       { name: "twitter:image", content: "https://ridenepal.com/og-image.png" },
     ],
@@ -120,23 +129,9 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthListener />
       <Outlet />
       <AiChatBubble />
       <Toaster richColors position="top-right" />
     </QueryClientProvider>
   );
-}
-
-function AuthListener() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      router.invalidate();
-      queryClient.invalidateQueries();
-    });
-    return () => subscription.unsubscribe();
-  }, [router, queryClient]);
-  return null;
 }

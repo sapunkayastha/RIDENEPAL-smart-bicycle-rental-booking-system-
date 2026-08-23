@@ -1,8 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
 
-// 1 point per NPR 10 spent on bookings that actually completed payment.
 const POINTS_PER_NPR = 1 / 10;
 
 export const TIERS = [
@@ -12,79 +11,102 @@ export const TIERS = [
   { name: "Legend", min: 10000 },
 ] as const;
 
-async function computeBalance(supabase: any, userId: string) {
-  const { data: bookings, error: bErr } = await supabase
-    .from("bookings")
-    .select("total_amount, status")
-    .eq("user_id", userId)
-    .in("status", ["paid", "active", "completed"]);
-  if (bErr) throw new Error(bErr.message);
+type BookingAmountRow = { total_amount: number };
+type RedemptionPointsRow = { points_spent: number };
+type CatalogRow = { id: string; name: string; points_cost: number; icon_key: string | null };
+type RedemptionRow = {
+  id: string;
+  reward_id: string;
+  points_spent: number;
+  redeemed_at: string;
+  reward_name: string;
+};
+type RewardRow = { id: string; points_cost: number; active: number };
 
+async function computeBalance(userId: string) {
+  const pool = (await import("@/lib/mysql/db.server")).default;
+  const [bookingRows] = await pool.query(
+    `SELECT total_amount FROM bookings WHERE user_id = :userId AND status IN ('paid', 'active', 'completed')`,
+    { userId },
+  );
   const earned = Math.floor(
-    (bookings ?? []).reduce((sum: number, b: any) => sum + Number(b.total_amount), 0) * POINTS_PER_NPR,
+    (bookingRows as BookingAmountRow[]).reduce((sum, b) => sum + Number(b.total_amount), 0) *
+      POINTS_PER_NPR,
   );
 
-  const { data: redemptions, error: rErr } = await supabase
-    .from("reward_redemptions")
-    .select("points_spent")
-    .eq("user_id", userId);
-  if (rErr) throw new Error(rErr.message);
-
-  const spent = (redemptions ?? []).reduce((sum: number, r: any) => sum + r.points_spent, 0);
+  const [redemptionRows] = await pool.query(
+    "SELECT points_spent FROM reward_redemptions WHERE user_id = :userId",
+    { userId },
+  );
+  const spent = (redemptionRows as RedemptionPointsRow[]).reduce(
+    (sum, r) => sum + r.points_spent,
+    0,
+  );
 
   return { earned, spent, balance: Math.max(0, earned - spent) };
 }
 
 export const getMyRewards = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const { earned, spent, balance } = await computeBalance(supabase, userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    const { earned, spent, balance } = await computeBalance(context.userId);
 
-    const { data: catalog, error: cErr } = await supabase
-      .from("reward_catalog")
-      .select("id, name, points_cost, icon_key")
-      .eq("active", true)
-      .order("sort_order", { ascending: true });
-    if (cErr) throw new Error(cErr.message);
+    const [catalogRows] = await pool.query(
+      "SELECT id, name, points_cost, icon_key FROM reward_catalog WHERE active = TRUE ORDER BY sort_order ASC",
+    );
 
-    const { data: redemptions, error: rErr } = await supabase
-      .from("reward_redemptions")
-      .select("id, reward_id, points_spent, redeemed_at, reward_catalog(name)")
-      .eq("user_id", userId)
-      .order("redeemed_at", { ascending: false })
-      .limit(20);
-    if (rErr) throw new Error(rErr.message);
+    const [redemptionRows] = await pool.query(
+      `SELECT rr.id, rr.reward_id, rr.points_spent, rr.redeemed_at, rc.name AS reward_name
+       FROM reward_redemptions rr
+       JOIN reward_catalog rc ON rc.id = rr.reward_id
+       WHERE rr.user_id = :userId
+       ORDER BY rr.redeemed_at DESC
+       LIMIT 20`,
+      { userId: context.userId },
+    );
 
     const tier = [...TIERS].reverse().find((t) => balance >= t.min) ?? TIERS[0];
     const nextTier = TIERS.find((t) => t.min > balance) ?? null;
 
-    return { earned, spent, balance, tier: tier.name, nextTier, catalog: catalog ?? [], redemptions: redemptions ?? [] };
+    return {
+      earned,
+      spent,
+      balance,
+      tier: tier.name,
+      nextTier,
+      catalog: catalogRows as CatalogRow[],
+      redemptions: (redemptionRows as RedemptionRow[]).map((r) => ({
+        ...r,
+        reward_catalog: { name: r.reward_name },
+      })),
+    };
   });
 
 export const redeemReward = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMysqlAuth])
   .inputValidator((input) => z.object({ rewardId: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const { balance } = await computeBalance(supabase, userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    const { balance } = await computeBalance(context.userId);
 
-    const { data: reward, error: rewardErr } = await supabase
-      .from("reward_catalog")
-      .select("id, points_cost, active")
-      .eq("id", data.rewardId)
-      .single();
-    if (rewardErr || !reward) throw new Error("Reward not found");
+    const [rewardRows] = await pool.query(
+      "SELECT id, points_cost, active FROM reward_catalog WHERE id = :id",
+      { id: data.rewardId },
+    );
+    const reward = (rewardRows as RewardRow[])[0];
+    if (!reward) throw new Error("Reward not found");
     if (!reward.active) throw new Error("This reward is no longer available");
     if (balance < reward.points_cost) throw new Error("Not enough points for this reward");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("reward_redemptions").insert({
-      user_id: userId,
-      reward_id: reward.id,
-      points_spent: reward.points_cost,
-    });
-    if (error) throw new Error(error.message);
-
+    await pool.execute(
+      "INSERT INTO reward_redemptions (id, user_id, reward_id, points_spent) VALUES (:id, :userId, :rewardId, :points)",
+      {
+        id: crypto.randomUUID(),
+        userId: context.userId,
+        rewardId: reward.id,
+        points: reward.points_cost,
+      },
+    );
     return { ok: true };
   });

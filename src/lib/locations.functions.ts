@@ -1,9 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
+import { assertStaff } from "@/lib/auth/role-check";
+
+async function getPool() {
+  return (await import("@/lib/mysql/db.server")).default;
+}
+
+type BookingOwnerRow = { user_id: string };
+type LocationPointRow = { lat: number; lng: number; recorded_at: string };
 
 export const postLocation = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMysqlAuth])
   .inputValidator((input) =>
     z
       .object({
@@ -15,81 +23,90 @@ export const postLocation = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    // Verify booking ownership
-    const { data: booking, error: bErr } = await supabase
-      .from("bookings")
-      .select("user_id")
-      .eq("id", data.booking_id)
-      .single();
-    if (bErr || !booking) throw new Error("Booking not found");
-    if (booking.user_id !== userId) throw new Error("Forbidden");
+    const pool = await getPool();
 
-    const { error } = await supabase.from("ride_locations").insert({
-      booking_id: data.booking_id,
-      user_id: userId,
-      lat: data.lat,
-      lng: data.lng,
-      accuracy: data.accuracy ?? null,
+    const [rows] = await pool.query("SELECT user_id FROM bookings WHERE id = :id", {
+      id: data.booking_id,
     });
-    if (error) throw new Error(error.message);
+    const booking = (rows as BookingOwnerRow[])[0];
+    if (!booking) throw new Error("Booking not found");
+    if (booking.user_id !== context.userId) throw new Error("Forbidden");
+
+    await pool.execute(
+      `INSERT INTO ride_locations (booking_id, user_id, lat, lng, accuracy)
+       VALUES (:bookingId, :userId, :lat, :lng, :accuracy)`,
+      {
+        bookingId: data.booking_id,
+        userId: context.userId,
+        lat: data.lat,
+        lng: data.lng,
+        accuracy: data.accuracy ?? null,
+      },
+    );
     return { ok: true };
   });
 
 export const getRideTrack = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMysqlAuth])
   .inputValidator((input) => z.object({ booking_id: z.string().uuid() }).parse(input))
-  .handler(async ({ data, context }) => {
-    const { data: points, error } = await context.supabase
-      .from("ride_locations")
-      .select("lat, lng, recorded_at")
-      .eq("booking_id", data.booking_id)
-      .order("recorded_at", { ascending: true })
-      .limit(500);
-    if (error) throw new Error(error.message);
-    return points ?? [];
+  .handler(async ({ data }) => {
+    const pool = await getPool();
+    const [rows] = await pool.query(
+      `SELECT lat, lng, recorded_at FROM ride_locations
+       WHERE booking_id = :bookingId
+       ORDER BY recorded_at ASC
+       LIMIT 500`,
+      { bookingId: data.booking_id },
+    );
+    return rows as LocationPointRow[];
   });
+
+type ActiveBooking = {
+  id: string;
+  user_id: string;
+  status: string;
+  bike_name: string | null;
+  full_name: string | null;
+};
+
 export const getActiveRideLocations = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
-    const { assertStaff } = await import("@/lib/server-roles");
-    await assertStaff(context.supabase, context.userId);
+    await assertStaff(context.userId);
+    const pool = await getPool();
 
-    type ActiveBooking = {
-      id: string;
-      user_id: string;
-      status: string;
-      bikes: { name: string } | null;
-      profiles: { full_name: string | null } | null;
-    };
-
-    // Active bookings with their bike + customer info
-    const { data: bookings, error: bErr } = await context.supabase
-      .from("bookings")
-      .select("id, user_id, status, bikes(name), profiles(full_name)")
-      .in("status", ["paid", "active"])
-      .returns<ActiveBooking[]>();
-    if (bErr) throw new Error(bErr.message);
-
-    const activeIds = (bookings ?? []).map((b) => b.id);
+    const [bookingRows] = await pool.query(
+      `SELECT b.id, b.user_id, b.status, bk.name AS bike_name, u.full_name
+       FROM bookings b
+       JOIN bikes bk ON bk.id = b.bike_id
+       JOIN users u ON u.id = b.user_id
+       WHERE b.status IN ('paid', 'active')`,
+    );
+    const bookings = bookingRows as ActiveBooking[];
+    const activeIds = bookings.map((b) => b.id);
     if (activeIds.length === 0) return [];
 
-    // Latest location per booking
-    const { data: locations, error: lErr } = await context.supabase
-      .from("ride_locations")
-      .select("booking_id, lat, lng, recorded_at")
-      .in("booking_id", activeIds)
-      .order("recorded_at", { ascending: false });
-    if (lErr) throw new Error(lErr.message);
+    const [locationRows] = await pool.query(
+      `SELECT booking_id, lat, lng, recorded_at FROM ride_locations
+       WHERE booking_id IN (:ids)
+       ORDER BY recorded_at DESC`,
+      { ids: activeIds },
+    );
+    const locations = locationRows as {
+      booking_id: string;
+      lat: number;
+      lng: number;
+      recorded_at: string;
+    }[];
 
-    return (bookings ?? [])
+    return bookings
       .map((b) => {
-        const latest = (locations ?? []).find((l) => l.booking_id === b.id);
+        const latest = locations.find((l) => l.booking_id === b.id);
         if (!latest) return null;
         return {
           bookingId: b.id,
-          bikeName: b.bikes?.name ?? "Unknown bike",
-          customerName: b.profiles?.full_name ?? "Unknown customer",
+          bikeName: b.bike_name ?? "Unknown bike",
+          customerName: b.full_name ?? "Unknown customer",
           lat: latest.lat,
           lng: latest.lng,
           recordedAt: latest.recorded_at,

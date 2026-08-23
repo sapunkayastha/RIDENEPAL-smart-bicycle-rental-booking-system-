@@ -1,12 +1,14 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { me } from "@/lib/auth.functions";
+import { myRole } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/_authenticated/_admin")({
   beforeLoad: async () => {
     try {
-      await me();
-    } catch {
-      throw redirect({ to: "/auth" });
+      const { isStaff } = await myRole();
+      if (!isStaff) throw redirect({ to: "/dashboard" });
+    } catch (err) {
+      if (err && typeof err === "object" && "to" in (err as Record<string, unknown>)) throw err;
+      throw redirect({ to: "/dashboard" });
     }
   },
   component: () => <Outlet />,

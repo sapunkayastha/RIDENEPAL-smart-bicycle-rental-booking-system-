@@ -1,51 +1,59 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
+
+type ProfileRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  phone: string | null;
+  otp_verified: number;
+  created_at: string;
+};
+
+type BookingSpendRow = { status: string; total_amount: number };
+type RoleRow = { role: string };
 
 export const getMyProfile = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
-    const { data: profile, error } = await context.supabase
-      .from("profiles")
-      .select("id, full_name, phone, otp_verified, created_at")
-      .eq("id", context.userId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    const [profileRows] = await pool.query(
+      "SELECT id, email, full_name, phone, otp_verified, created_at FROM users WHERE id = :id",
+      { id: context.userId },
+    );
+    const profile = (profileRows as ProfileRow[])[0];
+    if (!profile) throw new Error("Profile not found");
 
-    const { data: roles } = await context.supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.userId);
+    const [roleRows] = await pool.query("SELECT role FROM user_roles WHERE user_id = :id", {
+      id: context.userId,
+    });
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(context.userId);
-
-    const { data: bookings } = await context.supabase
-      .from("bookings")
-      .select("status, total_amount")
-      .eq("user_id", context.userId);
-
-    const spend = (bookings ?? [])
+    const [bookingRows] = await pool.query(
+      "SELECT status, total_amount FROM bookings WHERE user_id = :id",
+      { id: context.userId },
+    );
+    const bookings = bookingRows as BookingSpendRow[];
+    const spend = bookings
       .filter((b) => b.status !== "pending" && b.status !== "cancelled")
       .reduce((s, b) => s + Number(b.total_amount), 0);
 
     return {
       id: context.userId,
-      full_name: profile?.full_name ?? "",
-      phone: profile?.phone ?? "",
-      otp_verified: profile?.otp_verified ?? false,
-      created_at: profile?.created_at ?? null,
-      email: authUser?.user?.email ?? null,
-      avatar_url:
-        (authUser?.user?.user_metadata as { avatar_url?: string } | undefined)?.avatar_url ?? null,
-      roles: (roles ?? []).map((r) => r.role),
-      booking_count: (bookings ?? []).length,
+      full_name: profile.full_name ?? "",
+      phone: profile.phone ?? "",
+      otp_verified: Boolean(profile.otp_verified),
+      created_at: profile.created_at,
+      email: profile.email,
+      avatar_url: null,
+      roles: (roleRows as RoleRow[]).map((r) => r.role),
+      booking_count: bookings.length,
       total_spend: spend,
     };
   });
 
 export const updateMyProfile = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireMysqlAuth])
   .inputValidator((input) =>
     z
       .object({
@@ -55,13 +63,11 @@ export const updateMyProfile = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin
-      .from("profiles")
-      .upsert(
-        { id: context.userId, full_name: data.full_name, phone: data.phone || null },
-        { onConflict: "id" },
-      );
-    if (error) throw new Error(error.message);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    await pool.execute("UPDATE users SET full_name = :fullName, phone = :phone WHERE id = :id", {
+      fullName: data.full_name,
+      phone: data.phone || null,
+      id: context.userId,
+    });
     return { ok: true };
   });

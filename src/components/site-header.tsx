@@ -1,20 +1,34 @@
 import { Link } from "@tanstack/react-router";
-import { MessageSquare, User, LogOut, ShieldCheck } from "lucide-react";
-import { NotificationBell } from "@/components/notification-bell";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { amIStaff } from "@/lib/admin.functions";
+import { myRole, logout } from "@/lib/auth.functions";
+import { me } from "@/lib/auth.functions";
+import { UserMenu } from "@/components/user-menu";
+import { useNavigate } from "@tanstack/react-router";
 
 export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
-  const { user, signOut } = useAuth();
-  const checkStaff = useServerFn(amIStaff);
-  const { data: staffAccess } = useQuery({
-    queryKey: ["is-staff", user?.id],
-    queryFn: () => checkStaff(),
-    enabled: Boolean(user),
+  const navigate = useNavigate();
+  const fetchMe = useServerFn(me);
+  const fetchRole = useServerFn(myRole);
+  const doLogout = useServerFn(logout);
+
+  const { data: user } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => fetchMe(),
+    retry: false,
   });
+
+  const { data: roleFlags } = useQuery({
+    queryKey: ["my-role"],
+    queryFn: () => fetchRole(),
+    enabled: Boolean(user),
+    retry: false,
+  });
+
+  async function handleSignOut() {
+    await doLogout();
+    navigate({ to: "/auth" });
+  }
 
   const wrap = transparent ? "absolute top-0 left-0 right-0 z-20" : "border-b bg-background";
   const linkCls = transparent
@@ -53,38 +67,22 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
           <Link to="/rewards" className={linkCls}>
             Rewards
           </Link>
-          {user && (
-            <Link to="/dashboard" className={linkCls}>
-              Dashboard
-            </Link>
-          )}
-          {staffAccess?.isStaff && (
-            <Link to="/admin" className={`${linkCls} flex items-center gap-1 font-semibold`}>
-              <ShieldCheck className="size-4" />{" "}
-              {staffAccess.isSuperAdmin ? "Super Admin" : "Admin"}
-            </Link>
-          )}
         </nav>
         <div className="flex items-center gap-3">
-          <Link to="/chat" aria-label="Messages" className={linkCls}>
-            <MessageSquare className="size-5" />
-          </Link>
-          {user && <NotificationBell linkCls={linkCls} />}
-          {user && (
-            <Link to="/profile" aria-label="My Profile" className={linkCls}>
-              <User className="size-5" />
-            </Link>
-          )}
           {user ? (
-            <Button size="sm" variant="outline" onClick={() => signOut()}>
-              <LogOut className="size-4 mr-1" /> Sign Out
-            </Button>
+            <UserMenu
+              linkCls={linkCls}
+              isStaff={roleFlags?.isStaff ?? false}
+              isSuperAdmin={roleFlags?.isSuperAdmin ?? false}
+              onSignOut={handleSignOut}
+            />
           ) : (
-            <Button asChild size="sm" className="bg-primary hover:bg-primary/90">
-              <Link to="/auth">
-                <User className="size-4 mr-1" /> Sign In
-              </Link>
-            </Button>
+            <Link
+              to="/auth"
+              className="inline-flex items-center gap-1 rounded-md bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium px-3 py-1.5"
+            >
+              Sign In
+            </Link>
           )}
         </div>
       </div>

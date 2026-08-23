@@ -25,6 +25,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BikeBikeIdRouteImport } from './routes/bike.$bikeId'
+import { Route as ApiGalleryUploadRouteImport } from './routes/api/gallery-upload'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -115,6 +116,11 @@ const BikeBikeIdRoute = BikeBikeIdRouteImport.update({
   path: '/bike/$bikeId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiGalleryUploadRoute = ApiGalleryUploadRouteImport.update({
+  id: '/api/gallery-upload',
+  path: '/api/gallery-upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -188,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
   '/messages': typeof AuthenticatedAdminMessagesRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
   '/messages': typeof AuthenticatedAdminMessagesRoute
@@ -243,6 +251,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/_authenticated/_admin/admin': typeof AuthenticatedAdminAdminRoute
   '/_authenticated/_admin/messages': typeof AuthenticatedAdminMessagesRoute
@@ -271,6 +280,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/profile'
     | '/api/chat'
+    | '/api/gallery-upload'
     | '/bike/$bikeId'
     | '/admin'
     | '/messages'
@@ -297,6 +307,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/profile'
     | '/api/chat'
+    | '/api/gallery-upload'
     | '/bike/$bikeId'
     | '/admin'
     | '/messages'
@@ -325,6 +336,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/profile'
     | '/api/chat'
+    | '/api/gallery-upload'
     | '/bike/$bikeId'
     | '/_authenticated/_admin/admin'
     | '/_authenticated/_admin/messages'
@@ -351,6 +363,7 @@ export interface RootRouteChildren {
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   VerifyOtpRoute: typeof VerifyOtpRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiGalleryUploadRoute: typeof ApiGalleryUploadRoute
   BikeBikeIdRoute: typeof BikeBikeIdRoute
 }
 
@@ -466,6 +479,13 @@ declare module '@tanstack/react-router' {
       path: '/bike/$bikeId'
       fullPath: '/bike/$bikeId'
       preLoaderRoute: typeof BikeBikeIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gallery-upload': {
+      id: '/api/gallery-upload'
+      path: '/api/gallery-upload'
+      fullPath: '/api/gallery-upload'
+      preLoaderRoute: typeof ApiGalleryUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/chat': {
@@ -597,6 +617,7 @@ const rootRouteChildren: RootRouteChildren = {
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   VerifyOtpRoute: VerifyOtpRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiGalleryUploadRoute: ApiGalleryUploadRoute,
   BikeBikeIdRoute: BikeBikeIdRoute,
 }
 export const routeTree = rootRouteImport

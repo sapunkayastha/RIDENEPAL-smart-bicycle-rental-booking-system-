@@ -1,14 +1,20 @@
 // src/lib/auth.functions.ts
 import { createServerFn } from "@tanstack/react-start";
-import { randomUUID, randomInt } from "node:crypto";
 import { z } from "zod";
-import pool from "@/lib/mysql/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { signSessionToken, verifySessionToken } from "@/lib/auth/session";
 import { setSessionCookie, clearSessionCookie, getSessionCookie } from "@/lib/auth/cookies";
 import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
 import { assignRoleForEmail } from "@/lib/auth/roles";
 import { getGoogleAuthUrl, getGoogleUserFromCode } from "@/lib/auth/google";
+import { getMyRoleFlags } from "@/lib/auth/role-check";
+
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+const SESSION_DAYS = 7;
+const OTP_TTL_MINUTES = 10;
 
 type UserRow = {
   id: string;
@@ -19,11 +25,13 @@ type UserRow = {
   otp_verified: number;
 };
 
-const SESSION_DAYS = 7;
-const OTP_TTL_MINUTES = 10;
+async function getPool() {
+  return (await import("@/lib/mysql/db.server")).default;
+}
 
 async function createSession(userId: string) {
-  const sessionId = randomUUID();
+  const pool = await getPool();
+  const sessionId = crypto.randomUUID();
   await pool.execute(
     "INSERT INTO sessions (id, user_id, expires_at) VALUES (:id, :userId, DATE_ADD(NOW(), INTERVAL :days DAY))",
     { id: sessionId, userId, days: SESSION_DAYS },
@@ -33,6 +41,7 @@ async function createSession(userId: string) {
 }
 
 async function assignRoleRow(userId: string, email: string) {
+  const pool = await getPool();
   const role = assignRoleForEmail(email);
   await pool.execute("INSERT IGNORE INTO user_roles (user_id, role) VALUES (:userId, :role)", {
     userId,
@@ -51,12 +60,13 @@ export const signUpWithPassword = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
+    const pool = await getPool();
     const email = data.email.toLowerCase().trim();
     const [existing] = await pool.query("SELECT id FROM users WHERE email = :email", { email });
     if ((existing as unknown[]).length > 0)
       throw new Error("An account with this email already exists");
 
-    const userId = randomUUID();
+    const userId = crypto.randomUUID();
     const passwordHash = await hashPassword(data.password);
     await pool.execute(
       `INSERT INTO users (id, email, password_hash, full_name, otp_verified, email_confirmed)
@@ -73,6 +83,7 @@ export const signInWithPassword = createServerFn({ method: "POST" })
     z.object({ email: z.string().email(), password: z.string() }).parse(input),
   )
   .handler(async ({ data }) => {
+    const pool = await getPool();
     const email = data.email.toLowerCase().trim();
     const [rows] = await pool.query("SELECT id, password_hash FROM users WHERE email = :email", {
       email,
@@ -92,6 +103,7 @@ export const logout = createServerFn({ method: "POST" }).handler(async () => {
   if (token) {
     const decoded = verifySessionToken(token);
     if (decoded) {
+      const pool = await getPool();
       await pool.execute("DELETE FROM sessions WHERE id = :id", { id: decoded.sessionId });
     }
   }
@@ -102,6 +114,7 @@ export const logout = createServerFn({ method: "POST" }).handler(async () => {
 export const me = createServerFn({ method: "GET" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
+    const pool = await getPool();
     const [rows] = await pool.query(
       "SELECT id, email, full_name, otp_verified FROM users WHERE id = :id",
       { id: context.userId },
@@ -116,6 +129,13 @@ export const me = createServerFn({ method: "GET" })
     };
   });
 
+export const myRole = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    const flags = await getMyRoleFlags(context.userId);
+    return { ...flags, userId: context.userId };
+  });
+
 export const googleAuthUrl = createServerFn({ method: "GET" }).handler(async () => {
   return { url: getGoogleAuthUrl() };
 });
@@ -123,6 +143,7 @@ export const googleAuthUrl = createServerFn({ method: "GET" }).handler(async () 
 export const completeGoogleSignIn = createServerFn({ method: "POST" })
   .inputValidator((input) => z.object({ code: z.string() }).parse(input))
   .handler(async ({ data }) => {
+    const pool = await getPool();
     const gUser = await getGoogleUserFromCode(data.code);
     const email = gUser.email.toLowerCase().trim();
 
@@ -133,7 +154,7 @@ export const completeGoogleSignIn = createServerFn({ method: "POST" })
     let user = (rows as UserRow[])[0];
 
     if (!user) {
-      const userId = randomUUID();
+      const userId = crypto.randomUUID();
       await pool.execute(
         `INSERT INTO users (id, email, google_id, full_name, otp_verified, email_confirmed)
          VALUES (:id, :email, :googleId, :fullName, FALSE, TRUE)`,
@@ -166,6 +187,7 @@ export const completeGoogleSignIn = createServerFn({ method: "POST" })
 export const sendOtp = createServerFn({ method: "POST" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
+    const pool = await getPool();
     const [rows] = await pool.query("SELECT email FROM users WHERE id = :id", {
       id: context.userId,
     });
@@ -185,6 +207,7 @@ export const verifyOtpCode = createServerFn({ method: "POST" })
   .middleware([requireMysqlAuth])
   .inputValidator((input) => z.object({ code: z.string().length(6) }).parse(input))
   .handler(async ({ data, context }) => {
+    const pool = await getPool();
     const [rows] = await pool.query(
       `SELECT id FROM otp_codes
        WHERE user_id = :userId AND code = :code AND expires_at > NOW()

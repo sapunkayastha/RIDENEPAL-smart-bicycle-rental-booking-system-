@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
 import { Send, Loader2, LifeBuoy } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { me } from "@/lib/auth.functions";
 import { listMySupportMessages, sendMySupportMessage } from "@/lib/support-chat.functions";
 import { toast } from "sonner";
 
@@ -17,15 +17,13 @@ function SupportChat() {
   const navigate = useNavigate();
   const fetchMessages = useServerFn(listMySupportMessages);
   const send = useServerFn(sendMySupportMessage);
+  const fetchMe = useServerFn(me);
   const qc = useQueryClient();
   const [text, setText] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) navigate({ to: "/auth" });
-    })();
+    fetchMe().catch(() => navigate({ to: "/auth" }));
   }, [navigate]);
 
   const { data: messages, isLoading } = useQuery({

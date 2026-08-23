@@ -1,7 +1,6 @@
-// src/lib/auth/roles-check.ts
-import pool from "@/lib/mysql/db";
-
+// src/lib/auth/role-check.ts
 async function hasRole(userId: string, role: string): Promise<boolean> {
+  const pool = (await import("@/lib/mysql/db.server")).default;
   const [rows] = await pool.query(
     "SELECT 1 FROM user_roles WHERE user_id = :userId AND role = :role LIMIT 1",
     { userId, role },

@@ -12,16 +12,26 @@ const requestSchema = z.object({
 export const submitBulkRentRequest = createServerFn({ method: "POST" })
   .inputValidator((input) => requestSchema.parse(input))
   .handler(async ({ data }) => {
-    // Public form — no auth required.
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("bulk_rent_requests").insert({
-      organization: data.organization,
-      contact_email: data.contact_email,
-      bike_count: data.bike_count,
-      event_date: data.event_date || null,
-      notes: data.notes || null,
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    await pool.execute(
+      `INSERT INTO bulk_rent_requests (id, organization, contact_email, bike_count, event_date, notes)
+       VALUES (:id, :organization, :contactEmail, :bikeCount, :eventDate, :notes)`,
+      {
+        id: crypto.randomUUID(),
+        organization: data.organization,
+        contactEmail: data.contact_email,
+        bikeCount: data.bike_count,
+        eventDate: data.event_date || null,
+        notes: data.notes || null,
+      },
+    );
+
+    const { notifyStaff } = await import("@/lib/notifications.functions");
+    await notifyStaff({
+      title: "New bulk rent request",
+      body: `${data.organization} requested ${data.bike_count} bikes.`,
+      link: "/admin",
     });
-    if (error) throw new Error(error.message);
 
     return { ok: true };
   });
