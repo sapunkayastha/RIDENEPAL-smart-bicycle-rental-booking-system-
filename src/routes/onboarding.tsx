@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useServerFn } from "@tanstack/react-start";
+import { useAuth } from "@/hooks/use-auth";
+import { signUpWithPassword } from "@/lib/auth.functions";
 import { completeCustomerOnboarding } from "@/lib/onboarding.functions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Bike, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
+import { Bike, ShieldCheck, UserPlus } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding")({
   ssr: false,
@@ -23,7 +24,8 @@ export const Route = createFileRoute("/onboarding")({
       { property: "og:title", content: "Create Your Rider Account — RIDENEPAL" },
       {
         property: "og:description",
-        content: "Join RIDENEPAL as a customer, verify your email and unlock bike bookings, rewards and live ride tracking.",
+        content:
+          "Join RIDENEPAL as a customer, verify your email and unlock bike bookings, rewards and live ride tracking.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -34,23 +36,22 @@ export const Route = createFileRoute("/onboarding")({
 function OnboardingPage() {
   const navigate = useNavigate();
   const finishOnboarding = useServerFn(completeCustomerOnboarding);
+  const signUp = useServerFn(signUpWithPassword);
+  const { user } = useAuth();
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checkEmail, setCheckEmail] = useState(false);
   const [hasSession, setHasSession] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setHasSession(true);
-        setEmail(data.session.user.email ?? "");
-      }
-    });
-  }, []);
+    if (user) {
+      setHasSession(true);
+      setEmail(user.email ?? "");
+    }
+  }, [user]);
 
   async function routeAfterSignup() {
     const result = await finishOnboarding({ data: { fullName, phone } });
@@ -68,19 +69,7 @@ function OnboardingPage() {
     setLoading(true);
     try {
       if (!hasSession) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/onboarding`,
-            data: { full_name: fullName, phone },
-          },
-        });
-        if (error) throw error;
-        if (!data.session) {
-          setCheckEmail(true);
-          return;
-        }
+        await signUp({ data: { email, password, fullName } });
       }
       await routeAfterSignup();
     } catch (err) {
@@ -88,28 +77,6 @@ function OnboardingPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  if (checkEmail) {
-    return (
-      <div className="min-h-screen bg-secondary/30 flex items-center justify-center px-6 py-12">
-        <Card className="w-full max-w-md p-8 border-0 shadow-sm text-center">
-          <div className="flex justify-center mb-4">
-            <div className="size-14 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-              <MailCheck className="size-7" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold">Confirm your email</h1>
-          <p className="text-sm text-muted-foreground mt-2">
-            We sent a confirmation link to <span className="font-medium text-foreground">{email}</span>. Open it, then
-            come back here to finish setting up your rider account.
-          </p>
-          <Button asChild variant="outline" className="mt-6 w-full">
-            <Link to="/auth">Back to sign in</Link>
-          </Button>
-        </Card>
-      </div>
-    );
   }
 
   return (
@@ -136,7 +103,12 @@ function OnboardingPage() {
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className="text-xs text-muted-foreground">FULL NAME</label>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={100} />
+            <Input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              maxLength={100}
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">PHONE</label>
@@ -170,7 +142,11 @@ function OnboardingPage() {
               />
             </div>
           )}
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full bg-primary hover:bg-primary/90"
+            disabled={loading}
+          >
             {loading ? "Setting up…" : hasSession ? "Continue" : "Create customer account"}
           </Button>
         </form>

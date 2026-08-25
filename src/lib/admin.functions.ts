@@ -96,3 +96,87 @@ export const setUserRole = createServerFn({ method: "POST" })
     });
     return { ok: true };
   });
+
+type PendingBookingRow = {
+  id: string;
+  total_amount: number;
+  pickup_location: string | null;
+  start_date: string;
+  end_date: string;
+  created_at: string;
+  customer_name: string | null;
+  customer_email: string;
+  bike_name: string;
+  bike_type: string;
+};
+
+export const listPendingBookings = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    // Any staff member can verify a pending booking (same access rule as listCustomers).
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+
+    const [rows] = await pool.query(
+      `SELECT b.id, b.total_amount, b.pickup_location, b.start_date, b.end_date, b.created_at,
+              u.full_name AS customer_name, u.email AS customer_email,
+              bk.name AS bike_name, bk.type AS bike_type
+       FROM bookings b
+       JOIN users u ON u.id = b.user_id
+       JOIN bikes bk ON bk.id = b.bike_id
+       WHERE b.status = 'pending'
+       ORDER BY b.created_at ASC`,
+    );
+
+    return (rows as PendingBookingRow[]).map((r) => ({
+      id: r.id,
+      totalAmount: r.total_amount,
+      pickupLocation: r.pickup_location,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      createdAt: r.created_at,
+      customerName: r.customer_name,
+      customerEmail: r.customer_email,
+      bikeName: r.bike_name,
+      bikeType: r.bike_type,
+    }));
+  });
+
+export const verifyBookingPayment = createServerFn({ method: "POST" })
+  .middleware([requireMysqlAuth])
+  .inputValidator((input: { bookingId: string }) => {
+    if (!input?.bookingId) throw new Error("bookingId is required");
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    // Any staff member can verify — matches the "admin and super admin can
+    // verify" requirement. Role changes remain super_admin-only (setUserRole).
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+
+    const [rows] = await pool.query(
+      "SELECT id, user_id, status, total_amount FROM bookings WHERE id = :id",
+      { id: data.bookingId },
+    );
+    const booking = (
+      rows as { id: string; user_id: string; status: string; total_amount: number }[]
+    )[0];
+    if (!booking) throw new Error("Booking not found");
+    if (booking.status !== "pending") {
+      throw new Error("Only pending bookings can be verified");
+    }
+
+    await pool.execute("UPDATE bookings SET status = 'paid' WHERE id = :id", {
+      id: data.bookingId,
+    });
+
+    const { notifyUser } = await import("@/lib/notifications.functions");
+    await notifyUser({
+      userId: booking.user_id,
+      title: "Booking confirmed",
+      body: `Your booking for NPR ${Number(booking.total_amount).toFixed(0)} has been verified by our team and is now active.`,
+      link: "/dashboard",
+    });
+
+    return { ok: true };
+  });

@@ -15,8 +15,10 @@ import {
   Loader2,
   ArrowLeft,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { getBike } from "@/lib/bikes.functions";
 import { createBooking } from "@/lib/bookings.functions";
+import { myRole } from "@/lib/auth.functions";
 import { toast } from "sonner";
 import bike1 from "@/assets/bike-1.jpg";
 import bike2 from "@/assets/bike-2.jpg";
@@ -36,7 +38,7 @@ type BikeRow = {
   price_per_day: number | string;
   image_url: string | null;
   description: string | null;
-  available: boolean;
+  available: number | boolean;
   specs: Record<string, string | number | null> | null;
 };
 
@@ -49,19 +51,29 @@ const durationOptions = [
 function BikeDetail() {
   const { bikeId } = Route.useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [pickup, setPickup] = useState("Kathmandu");
   const [days, setDays] = useState(1);
 
+  const fetchMyRole = useServerFn(myRole);
+  const { data: roleData } = useQuery({
+    queryKey: ["my-role"],
+    queryFn: () => fetchMyRole(),
+    enabled: !!user,
+    retry: false,
+    throwOnError: false,
+  });
+  const isStaff = roleData?.isStaff ?? false;
+
+  const fetchBike = useServerFn(getBike);
   const { data: bike, isLoading } = useQuery({
     queryKey: ["bike", bikeId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bikes")
-        .select("*")
-        .eq("id", bikeId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as BikeRow | null;
+      try {
+        return (await fetchBike({ data: { id: bikeId } })) as BikeRow;
+      } catch {
+        return null;
+      }
     },
   });
 
@@ -69,8 +81,7 @@ function BikeDetail() {
   const bookingMutation = useMutation({
     mutationFn: async () => {
       if (!bike) throw new Error("Bike not loaded");
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session) {
+      if (!user) {
         navigate({ to: "/auth" });
         throw new Error("Please sign in to book");
       }
@@ -238,13 +249,20 @@ function BikeDetail() {
               <span className="text-sm">Total Estimate</span>
               <span className="text-2xl font-bold text-primary">NPR {total.toFixed(0)}</span>
             </div>
-            <Button
-              className="w-full bg-primary hover:bg-primary/90"
-              disabled={!bike.available || bookingMutation.isPending}
-              onClick={() => bookingMutation.mutate()}
-            >
-              {bookingMutation.isPending ? "Booking…" : "Confirm Booking"}
-            </Button>
+            {isStaff ? (
+              <p className="text-xs text-muted-foreground bg-secondary/70 rounded-md px-3 py-2 text-center">
+                Admin and Super Admin accounts can't book rides. Sign in with a customer account to
+                book.
+              </p>
+            ) : (
+              <Button
+                className="w-full bg-primary hover:bg-primary/90"
+                disabled={!bike.available || bookingMutation.isPending}
+                onClick={() => bookingMutation.mutate()}
+              >
+                {bookingMutation.isPending ? "Booking…" : "Confirm Booking"}
+              </Button>
+            )}
           </Card>
 
           <Card className="p-5 border-0 shadow-sm bg-secondary/50">

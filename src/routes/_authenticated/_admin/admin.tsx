@@ -5,9 +5,15 @@ import { SiteHeader } from "@/components/site-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listCustomers, setUserRole, myRole } from "@/lib/admin.functions";
+import {
+  listCustomers,
+  setUserRole,
+  myRole,
+  listPendingBookings,
+  verifyBookingPayment,
+} from "@/lib/admin.functions";
 import { roleLabel, type AppRole } from "@/lib/roles";
-import { ShieldCheck, Users, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ShieldCheck, Users, CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -48,6 +54,24 @@ function AdminDashboard() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update role"),
   });
 
+  const fetchPendingBookings = useServerFn(listPendingBookings);
+  const verifyBooking = useServerFn(verifyBookingPayment);
+
+  const { data: pendingBookings } = useQuery({
+    queryKey: ["admin-pending-bookings"],
+    queryFn: () => fetchPendingBookings(),
+  });
+
+  const verifyMutation = useMutation({
+    mutationFn: (vars: { bookingId: string }) => verifyBooking({ data: vars }),
+    onSuccess: () => {
+      toast.success("Booking verified and activated");
+      qc.invalidateQueries({ queryKey: ["admin-pending-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to verify booking"),
+  });
+
   const rows = (data ?? []).filter((c) => {
     const t = q.trim().toLowerCase();
     if (!t) return true;
@@ -70,9 +94,14 @@ function AdminDashboard() {
               {isSuperAdmin ? "Super Admin Console" : "Admin Console"}
             </h1>
           </div>
-          <Link to="/messages" className="text-sm font-medium text-primary hover:underline">
-            Support Inbox →
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link to="/manage-bikes" className="text-sm font-medium text-primary hover:underline">
+              Manage Bikes →
+            </Link>
+            <Link to="/messages" className="text-sm font-medium text-primary hover:underline">
+              Support Inbox →
+            </Link>
+          </div>
         </div>
         <p className="text-muted-foreground mb-8">
           {isSuperAdmin
@@ -98,6 +127,41 @@ function AdminDashboard() {
             <div className="text-3xl font-bold mt-2">{staffCount}</div>
           </Card>
         </div>
+
+        {pendingBookings && pendingBookings.length > 0 && (
+          <Card className="p-5 border-0 shadow-sm mb-8">
+            <h2 className="font-semibold flex items-center gap-2 mb-4">
+              <Clock className="size-4 text-primary" /> Pending Verification (
+              {pendingBookings.length})
+            </h2>
+            <div className="space-y-3">
+              {pendingBookings.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border rounded-lg px-4 py-3"
+                >
+                  <div>
+                    <div className="font-medium text-sm">
+                      {b.bikeName} · {b.customerName ?? b.customerEmail}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {b.customerEmail} · Pickup: {b.pickupLocation ?? "—"} · NPR{" "}
+                      {Number(b.totalAmount).toFixed(0)}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-primary hover:bg-primary/90 shrink-0"
+                    disabled={verifyMutation.isPending}
+                    onClick={() => verifyMutation.mutate({ bookingId: b.id })}
+                  >
+                    {verifyMutation.isPending ? "Verifying…" : "Verify & Activate"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div className="mb-4 max-w-sm">
           <Input

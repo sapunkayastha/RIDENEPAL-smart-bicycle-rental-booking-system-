@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { me, verifyOtpCode, sendOtp, logout } from "@/lib/auth.functions";
+import { me, verifyOtpCode, sendOtp, logout, myRole } from "@/lib/auth.functions";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ function VerifyOtpPage() {
   const verify = useServerFn(verifyOtpCode);
   const resend = useServerFn(sendOtp);
   const doLogout = useServerFn(logout);
+  const fetchMyRole = useServerFn(myRole);
 
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
@@ -40,7 +41,8 @@ function VerifyOtpPage() {
     try {
       await verify({ data: { code } });
       toast.success("Verified! Welcome to RIDENEPAL.");
-      navigate({ to: "/dashboard" });
+      const { isStaff } = await fetchMyRole();
+      navigate({ to: isStaff ? "/admin" : "/dashboard" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid code");
     } finally {

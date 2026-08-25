@@ -85,13 +85,23 @@ export const signInWithPassword = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const pool = await getPool();
     const email = data.email.toLowerCase().trim();
-    const [rows] = await pool.query("SELECT id, password_hash FROM users WHERE email = :email", {
-      email,
-    });
+    const [rows] = await pool.query(
+      "SELECT id, password_hash, google_id FROM users WHERE email = :email",
+      { email },
+    );
     const user = (rows as UserRow[])[0];
-    if (!user || !user.password_hash) throw new Error("Invalid email or password");
+
+    if (!user) throw new Error("No account found with this email. Try signing up instead.");
+
+    if (!user.password_hash) {
+      if (user.google_id) {
+        throw new Error('This account uses Google Sign-In. Click "Continue with Google" instead.');
+      }
+      throw new Error("This account has no password set. Try signing up instead.");
+    }
+
     const valid = await verifyPassword(data.password, user.password_hash);
-    if (!valid) throw new Error("Invalid email or password");
+    if (!valid) throw new Error("Incorrect password. Try again.");
 
     await pool.execute("UPDATE users SET last_sign_in_at = NOW() WHERE id = :id", { id: user.id });
     await createSession(user.id);

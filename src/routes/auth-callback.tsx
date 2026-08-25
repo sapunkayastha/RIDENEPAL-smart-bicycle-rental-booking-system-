@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { completeGoogleSignIn } from "@/lib/auth.functions";
+import { completeGoogleSignIn, myRole } from "@/lib/auth.functions";
 
 export const Route = createFileRoute("/auth-callback")({
   component: GoogleCallback,
@@ -11,6 +11,7 @@ export const Route = createFileRoute("/auth-callback")({
 function GoogleCallback() {
   const navigate = useNavigate();
   const completeSignIn = useServerFn(completeGoogleSignIn);
+  const fetchMyRole = useServerFn(myRole);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,8 +22,13 @@ function GoogleCallback() {
       return;
     }
     completeSignIn({ data: { code } })
-      .then((res) => {
-        navigate({ to: res.otpVerified ? "/dashboard" : "/verify-otp" });
+      .then(async (res) => {
+        if (!res.otpVerified) {
+          navigate({ to: "/verify-otp" });
+          return;
+        }
+        const { isStaff } = await fetchMyRole();
+        navigate({ to: isStaff ? "/admin" : "/dashboard" });
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "Google sign-in failed.");

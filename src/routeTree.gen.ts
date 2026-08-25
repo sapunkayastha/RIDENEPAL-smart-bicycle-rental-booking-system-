@@ -35,6 +35,7 @@ import { Route as AuthenticatedExtendBookingIdRouteImport } from './routes/_auth
 import { Route as AuthenticatedCheckoutBookingIdRouteImport } from './routes/_authenticated/checkout.$bookingId'
 import { Route as AuthenticatedAdminTrackingRouteImport } from './routes/_authenticated/_admin/tracking'
 import { Route as AuthenticatedAdminMessagesRouteImport } from './routes/_authenticated/_admin/messages'
+import { Route as AuthenticatedAdminManageBikesRouteImport } from './routes/_authenticated/_admin/manage-bikes'
 import { Route as AuthenticatedAdminAdminRouteImport } from './routes/_authenticated/_admin/admin'
 
 const VerifyOtpRoute = VerifyOtpRouteImport.update({
@@ -170,6 +171,12 @@ const AuthenticatedAdminMessagesRoute =
     path: '/messages',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedAdminManageBikesRoute =
+  AuthenticatedAdminManageBikesRouteImport.update({
+    id: '/manage-bikes',
+    path: '/manage-bikes',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminAdminRoute = AuthenticatedAdminAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -197,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
+  '/manage-bikes': typeof AuthenticatedAdminManageBikesRoute
   '/messages': typeof AuthenticatedAdminMessagesRoute
   '/tracking': typeof AuthenticatedAdminTrackingRoute
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
@@ -224,6 +232,7 @@ export interface FileRoutesByTo {
   '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
+  '/manage-bikes': typeof AuthenticatedAdminManageBikesRoute
   '/messages': typeof AuthenticatedAdminMessagesRoute
   '/tracking': typeof AuthenticatedAdminTrackingRoute
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
@@ -254,6 +263,7 @@ export interface FileRoutesById {
   '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
   '/_authenticated/_admin/admin': typeof AuthenticatedAdminAdminRoute
+  '/_authenticated/_admin/manage-bikes': typeof AuthenticatedAdminManageBikesRoute
   '/_authenticated/_admin/messages': typeof AuthenticatedAdminMessagesRoute
   '/_authenticated/_admin/tracking': typeof AuthenticatedAdminTrackingRoute
   '/_authenticated/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
@@ -283,6 +293,7 @@ export interface FileRouteTypes {
     | '/api/gallery-upload'
     | '/bike/$bikeId'
     | '/admin'
+    | '/manage-bikes'
     | '/messages'
     | '/tracking'
     | '/checkout/$bookingId'
@@ -310,6 +321,7 @@ export interface FileRouteTypes {
     | '/api/gallery-upload'
     | '/bike/$bikeId'
     | '/admin'
+    | '/manage-bikes'
     | '/messages'
     | '/tracking'
     | '/checkout/$bookingId'
@@ -339,6 +351,7 @@ export interface FileRouteTypes {
     | '/api/gallery-upload'
     | '/bike/$bikeId'
     | '/_authenticated/_admin/admin'
+    | '/_authenticated/_admin/manage-bikes'
     | '/_authenticated/_admin/messages'
     | '/_authenticated/_admin/tracking'
     | '/_authenticated/checkout/$bookingId'
@@ -551,6 +564,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminMessagesRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/_admin/manage-bikes': {
+      id: '/_authenticated/_admin/manage-bikes'
+      path: '/manage-bikes'
+      fullPath: '/manage-bikes'
+      preLoaderRoute: typeof AuthenticatedAdminManageBikesRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/_admin/admin': {
       id: '/_authenticated/_admin/admin'
       path: '/admin'
@@ -563,6 +583,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminAdminRoute: typeof AuthenticatedAdminAdminRoute
+  AuthenticatedAdminManageBikesRoute: typeof AuthenticatedAdminManageBikesRoute
   AuthenticatedAdminMessagesRoute: typeof AuthenticatedAdminMessagesRoute
   AuthenticatedAdminTrackingRoute: typeof AuthenticatedAdminTrackingRoute
 }
@@ -570,6 +591,7 @@ interface AuthenticatedAdminRouteRouteChildren {
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
   {
     AuthenticatedAdminAdminRoute: AuthenticatedAdminAdminRoute,
+    AuthenticatedAdminManageBikesRoute: AuthenticatedAdminManageBikesRoute,
     AuthenticatedAdminMessagesRoute: AuthenticatedAdminMessagesRoute,
     AuthenticatedAdminTrackingRoute: AuthenticatedAdminTrackingRoute,
   }

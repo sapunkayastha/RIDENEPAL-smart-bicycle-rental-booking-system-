@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
+import { getMyRoleFlags } from "@/lib/auth/role-check";
 
 type BikeRow = { id: string; price_per_day: number; available: number };
 
@@ -49,6 +50,13 @@ export const createBooking = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
+    const { isStaff } = await getMyRoleFlags(context.userId);
+    if (isStaff) {
+      throw new Error(
+        "Admin and Super Admin accounts can't book rides. Please use a customer account to book.",
+      );
+    }
+
     const pool = await getPool();
     const [rows] = await pool.query(
       "SELECT id, price_per_day, available FROM bikes WHERE id = :id",

@@ -77,3 +77,27 @@ export async function notifyStaff(params: { title: string; body?: string; link?:
     console.error("notifyStaff failed:", err);
   }
 }
+
+export async function notifyUser(params: {
+  userId: string;
+  title: string;
+  body?: string;
+  link?: string;
+}) {
+  try {
+    const pool = await getPool();
+    await pool.execute(
+      `INSERT INTO notifications (id, recipient_id, title, body, link)
+       VALUES (:id, :recipientId, :title, :body, :link)`,
+      {
+        id: crypto.randomUUID(),
+        recipientId: params.userId,
+        title: params.title,
+        body: params.body ?? null,
+        link: params.link ?? null,
+      },
+    );
+  } catch (err) {
+    console.error("notifyUser failed:", err);
+  }
+}
