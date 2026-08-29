@@ -144,3 +144,43 @@ export const getBooking = createServerFn({ method: "GET" })
       },
     };
   });
+
+export const cancelBooking = createServerFn({ method: "POST" })
+  .middleware([requireMysqlAuth])
+  .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const pool = await getPool();
+    const { isStaff } = await getMyRoleFlags(context.userId);
+
+    const [rows] = await pool.query("SELECT id, user_id, status FROM bookings WHERE id = :id", {
+      id: data.id,
+    });
+    const booking = (rows as { id: string; user_id: string; status: string }[])[0];
+    if (!booking) throw new Error("Booking not found");
+    if (!isStaff && booking.user_id !== context.userId) {
+      throw new Error("You can only cancel your own bookings");
+    }
+    if (!["pending", "paid", "active"].includes(booking.status)) {
+      throw new Error("This booking can no longer be cancelled");
+    }
+
+    await pool.execute(
+      "UPDATE bookings SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = :actorId WHERE id = :id",
+      { id: data.id, actorId: context.userId },
+    );
+
+    await pool.execute(
+      `INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details)
+       VALUES (:id, :actorId, :action, :targetType, :targetId, :details)`,
+      {
+        id: crypto.randomUUID(),
+        actorId: context.userId,
+        action: "booking_cancelled",
+        targetType: "booking",
+        targetId: data.id,
+        details: null,
+      },
+    );
+
+    return { ok: true };
+  });

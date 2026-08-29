@@ -12,7 +12,6 @@ export const Route = createFileRoute("/payment-return")({
   head: () => ({ meta: [{ title: "Payment Status — RIDENEPAL" }] }),
   validateSearch: (search: Record<string, unknown>) => ({
     data: typeof search.data === "string" ? search.data : undefined,
-    status: typeof search.status === "string" ? search.status : undefined,
     provider: typeof search.provider === "string" ? search.provider : undefined,
     pidx: typeof search.pidx === "string" ? search.pidx : undefined,
     purchase_order_id:
@@ -38,7 +37,9 @@ function PaymentReturn() {
       return;
     }
     if (!search.data) {
-      setState(search.status === "success" ? "loading" : "failed");
+      // No callback payload at all — the user likely cancelled before
+      // completing payment on eSewa's side, so there's nothing to verify.
+      setState("failed");
       return;
     }
     verify({ data: { encoded: search.data } })
@@ -47,40 +48,57 @@ function PaymentReturn() {
         setState(res.success ? "success" : "failed");
       })
       .catch(() => setState("failed"));
-  }, [search.data, search.status, search.pidx, verify, verifyKhalti]);
+  }, [search.data, search.pidx, verify, verifyKhalti]);
 
   const providerLabel = search.pidx ? "Khalti" : "eSewa";
-
 
   return (
     <div className="min-h-screen bg-secondary/30">
       <SiteHeader />
       <main className="max-w-md mx-auto px-6 py-16">
         <Card className="p-8 border-0 shadow-sm text-center">
-          {state === "loading" && (<>
-            <Loader2 className="size-12 text-primary mx-auto animate-spin" />
-            <h1 className="text-2xl font-bold mt-4">Verifying payment…</h1>
-            <p className="text-sm text-muted-foreground mt-2">Hold on while we confirm with {providerLabel}.</p>
-          </>)}
-          {state === "success" && (<>
-            <CheckCircle2 className="size-14 text-primary mx-auto" />
-            <h1 className="text-2xl font-bold mt-4">Payment Successful</h1>
-            <p className="text-sm text-muted-foreground mt-2">Your booking is confirmed. Have a great ride!</p>
-            <div className="flex flex-col gap-2 mt-6">
-              {bookingId && (
-                <Button asChild className="bg-primary hover:bg-primary/90">
-                  <Link to="/track/$bookingId" params={{ bookingId }}>Start Live Tracking</Link>
+          {state === "loading" && (
+            <>
+              <Loader2 className="size-12 text-primary mx-auto animate-spin" />
+              <h1 className="text-2xl font-bold mt-4">Verifying payment…</h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                Hold on while we confirm with {providerLabel}.
+              </p>
+            </>
+          )}
+          {state === "success" && (
+            <>
+              <CheckCircle2 className="size-14 text-primary mx-auto" />
+              <h1 className="text-2xl font-bold mt-4">Payment Successful</h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                Your booking is confirmed. Have a great ride!
+              </p>
+              <div className="flex flex-col gap-2 mt-6">
+                {bookingId && (
+                  <Button asChild className="bg-primary hover:bg-primary/90">
+                    <Link to="/track/$bookingId" params={{ bookingId }}>
+                      Start Live Tracking
+                    </Link>
+                  </Button>
+                )}
+                <Button asChild variant="outline">
+                  <Link to="/dashboard">Go to Dashboard</Link>
                 </Button>
-              )}
-              <Button asChild variant="outline"><Link to="/dashboard">Go to Dashboard</Link></Button>
-            </div>
-          </>)}
-          {state === "failed" && (<>
-            <XCircle className="size-14 text-destructive mx-auto" />
-            <h1 className="text-2xl font-bold mt-4">Payment Failed</h1>
-            <p className="text-sm text-muted-foreground mt-2">We couldn't confirm your payment. You can try again.</p>
-            <Button asChild className="mt-6 bg-primary hover:bg-primary/90"><Link to="/dashboard">Back to Dashboard</Link></Button>
-          </>)}
+              </div>
+            </>
+          )}
+          {state === "failed" && (
+            <>
+              <XCircle className="size-14 text-destructive mx-auto" />
+              <h1 className="text-2xl font-bold mt-4">Payment Failed</h1>
+              <p className="text-sm text-muted-foreground mt-2">
+                We couldn't confirm your payment. You can try again.
+              </p>
+              <Button asChild className="mt-6 bg-primary hover:bg-primary/90">
+                <Link to="/dashboard">Back to Dashboard</Link>
+              </Button>
+            </>
+          )}
         </Card>
       </main>
     </div>

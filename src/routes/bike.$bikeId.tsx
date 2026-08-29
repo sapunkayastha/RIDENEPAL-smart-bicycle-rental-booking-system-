@@ -29,6 +29,29 @@ export const Route = createFileRoute("/bike/$bikeId")({
   head: () => ({ meta: [{ title: "Bike Details — RIDENEPAL" }] }),
 });
 
+// TODO: Replace with your actual shop/hub locations and coordinates.
+// These are placeholder Kathmandu/Pokhara coordinates for demo purposes.
+export const PICKUP_LOCATIONS = [
+  {
+    id: "thamel",
+    name: "RideNepal Thamel Hub",
+    address: "Narsingh Chowk, Thamel, Kathmandu 44600",
+    lat: 27.7154,
+    lng: 85.3123,
+  },
+  {
+    id: "pokhara",
+    name: "RideNepal Lakeside Hub",
+    address: "Lakeside Road, Pokhara-6, Kaski",
+    lat: 28.2096,
+    lng: 83.9586,
+  },
+] as const;
+
+export function mapsSearchUrl(query: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 const fallbackImgs = [bike1, bike2, bike3];
 
 type BikeRow = {
@@ -52,7 +75,8 @@ function BikeDetail() {
   const { bikeId } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [pickup, setPickup] = useState("Kathmandu");
+  const [pickupId, setPickupId] = useState<string>(PICKUP_LOCATIONS[0].id);
+  const pickupLocation = PICKUP_LOCATIONS.find((l) => l.id === pickupId) ?? PICKUP_LOCATIONS[0];
   const [days, setDays] = useState(1);
 
   const fetchMyRole = useServerFn(myRole);
@@ -92,7 +116,7 @@ function BikeDetail() {
           bike_id: bike.id,
           start_date: start.toISOString(),
           end_date: end.toISOString(),
-          pickup_location: pickup,
+          pickup_location: `${pickupLocation.name} — ${pickupLocation.address}`,
         },
       });
     },
@@ -222,12 +246,28 @@ function BikeDetail() {
           <Card className="p-5 border-0 shadow-sm">
             <h3 className="font-semibold mb-4">Book This Bike</h3>
             <label className="text-xs text-muted-foreground">PICKUP LOCATION</label>
-            <input
-              className="w-full border rounded-md px-3 py-2 mt-1 mb-3 text-sm bg-background"
-              value={pickup}
-              onChange={(e) => setPickup(e.target.value)}
-            />
-            <label className="text-xs text-muted-foreground">DURATION</label>
+            <select
+              className="w-full border rounded-md px-3 py-2 mt-1 text-sm bg-background"
+              value={pickupId}
+              onChange={(e) => setPickupId(e.target.value)}
+            >
+              {PICKUP_LOCATIONS.map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground mt-1 mb-1">{pickupLocation.address}</p>
+
+            <a
+              href={mapsSearchUrl(pickupLocation.address)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              View on map →
+            </a>
+            <label className="text-xs text-muted-foreground block mt-3">DURATION</label>
             <select
               className="w-full border rounded-md px-3 py-2 mt-1 mb-4 text-sm bg-background"
               value={days}

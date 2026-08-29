@@ -39,8 +39,6 @@ export const myRole = createServerFn({ method: "GET" })
 export const listCustomers = createServerFn({ method: "GET" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
-    // Any staff member (admin or super_admin) can view the customer/staff
-    // list — only changing roles is restricted further, in setUserRole.
     await assertStaff(context.userId);
     const pool = (await import("@/lib/mysql/db.server")).default;
 
@@ -83,8 +81,6 @@ export const setUserRole = createServerFn({ method: "POST" })
     return input;
   })
   .handler(async ({ data, context }) => {
-    // Role management is super_admin only — an admin can never grant
-    // themselves or anyone else admin or super_admin privileges.
     await assertSuperAdmin(context.userId);
     if (data.userId === context.userId) throw new Error("You cannot change your own role");
 
@@ -94,6 +90,20 @@ export const setUserRole = createServerFn({ method: "POST" })
       userId: data.userId,
       role: data.role,
     });
+
+    await pool.execute(
+      `INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details)
+       VALUES (:id, :actorId, :action, :targetType, :targetId, :details)`,
+      {
+        id: crypto.randomUUID(),
+        actorId: context.userId,
+        action: "role_change",
+        targetType: "user",
+        targetId: data.userId,
+        details: `Changed role to ${data.role}`,
+      },
+    );
+
     return { ok: true };
   });
 
@@ -113,7 +123,6 @@ type PendingBookingRow = {
 export const listPendingBookings = createServerFn({ method: "GET" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
-    // Any staff member can verify a pending booking (same access rule as listCustomers).
     await assertStaff(context.userId);
     const pool = (await import("@/lib/mysql/db.server")).default;
 
@@ -149,8 +158,6 @@ export const verifyBookingPayment = createServerFn({ method: "POST" })
     return input;
   })
   .handler(async ({ data, context }) => {
-    // Any staff member can verify — matches the "admin and super admin can
-    // verify" requirement. Role changes remain super_admin-only (setUserRole).
     await assertStaff(context.userId);
     const pool = (await import("@/lib/mysql/db.server")).default;
 
@@ -178,5 +185,203 @@ export const verifyBookingPayment = createServerFn({ method: "POST" })
       link: "/dashboard",
     });
 
+    await pool.execute(
+      `INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details)
+       VALUES (:id, :actorId, :action, :targetType, :targetId, :details)`,
+      {
+        id: crypto.randomUUID(),
+        actorId: context.userId,
+        action: "booking_verified",
+        targetType: "booking",
+        targetId: data.bookingId,
+        details: null,
+      },
+    );
+
     return { ok: true };
+  });
+
+type ActiveBookingRow = {
+  id: string;
+  status: string;
+  total_amount: number;
+  start_date: string;
+  end_date: string;
+  customer_name: string | null;
+  customer_email: string;
+  bike_name: string;
+};
+
+export const listActiveBookings = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    const [rows] = await pool.query(
+      `SELECT b.id, b.status, b.total_amount, b.start_date, b.end_date,
+              u.full_name AS customer_name, u.email AS customer_email,
+              bk.name AS bike_name
+       FROM bookings b
+       JOIN users u ON u.id = b.user_id
+       JOIN bikes bk ON bk.id = b.bike_id
+       WHERE b.status IN ('paid', 'active')
+       ORDER BY b.start_date ASC`,
+    );
+    return (rows as ActiveBookingRow[]).map((r) => ({
+      id: r.id,
+      status: r.status,
+      totalAmount: r.total_amount,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      customerName: r.customer_name,
+      customerEmail: r.customer_email,
+      bikeName: r.bike_name,
+    }));
+  });
+
+export const completeBooking = createServerFn({ method: "POST" })
+  .middleware([requireMysqlAuth])
+  .inputValidator((input: { bookingId: string }) => {
+    if (!input?.bookingId) throw new Error("bookingId is required");
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+
+    const [rows] = await pool.query("SELECT id, status FROM bookings WHERE id = :id", {
+      id: data.bookingId,
+    });
+    const booking = (rows as { id: string; status: string }[])[0];
+    if (!booking) throw new Error("Booking not found");
+    if (!["paid", "active"].includes(booking.status)) {
+      throw new Error("Only active bookings can be marked completed");
+    }
+
+    await pool.execute("UPDATE bookings SET status = 'completed' WHERE id = :id", {
+      id: data.bookingId,
+    });
+
+    await pool.execute(
+      `INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details)
+       VALUES (:id, :actorId, :action, :targetType, :targetId, :details)`,
+      {
+        id: crypto.randomUUID(),
+        actorId: context.userId,
+        action: "booking_completed",
+        targetType: "booking",
+        targetId: data.bookingId,
+        details: null,
+      },
+    );
+
+    return { ok: true };
+  });
+
+type CancelledBookingRow = {
+  id: string;
+  total_amount: number;
+  cancelled_at: string | null;
+  customer_name: string | null;
+  customer_email: string;
+  bike_name: string;
+};
+
+export const listCancelledBookings = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    const [rows] = await pool.query(
+      `SELECT b.id, b.total_amount, b.cancelled_at,
+              u.full_name AS customer_name, u.email AS customer_email,
+              bk.name AS bike_name
+       FROM bookings b
+       JOIN users u ON u.id = b.user_id
+       JOIN bikes bk ON bk.id = b.bike_id
+       WHERE b.status = 'cancelled'
+       ORDER BY b.cancelled_at DESC`,
+    );
+    return (rows as CancelledBookingRow[]).map((r) => ({
+      id: r.id,
+      totalAmount: r.total_amount,
+      cancelledAt: r.cancelled_at,
+      customerName: r.customer_name,
+      customerEmail: r.customer_email,
+      bikeName: r.bike_name,
+    }));
+  });
+
+export const refundBooking = createServerFn({ method: "POST" })
+  .middleware([requireMysqlAuth])
+  .inputValidator((input: { bookingId: string; notes?: string }) => {
+    if (!input?.bookingId) throw new Error("bookingId is required");
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+
+    const [rows] = await pool.query("SELECT id, status FROM bookings WHERE id = :id", {
+      id: data.bookingId,
+    });
+    const booking = (rows as { id: string; status: string }[])[0];
+    if (!booking) throw new Error("Booking not found");
+    if (booking.status !== "cancelled") {
+      throw new Error("Only cancelled bookings can be marked refunded");
+    }
+
+    await pool.execute(
+      "UPDATE bookings SET status = 'refunded', refund_notes = :notes WHERE id = :id",
+      { id: data.bookingId, notes: data.notes ?? null },
+    );
+
+    await pool.execute(
+      `INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details)
+       VALUES (:id, :actorId, :action, :targetType, :targetId, :details)`,
+      {
+        id: crypto.randomUUID(),
+        actorId: context.userId,
+        action: "booking_refunded",
+        targetType: "booking",
+        targetId: data.bookingId,
+        details: data.notes ?? null,
+      },
+    );
+
+    return { ok: true };
+  });
+
+type AuditLogRow = {
+  id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  details: string | null;
+  created_at: string;
+  actor_email: string;
+};
+
+export const listAuditLog = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    const [rows] = await pool.query(
+      `SELECT al.id, al.action, al.target_type, al.target_id, al.details, al.created_at,
+              u.email AS actor_email
+       FROM audit_log al
+       JOIN users u ON u.id = al.actor_id
+       ORDER BY al.created_at DESC
+       LIMIT 30`,
+    );
+    return (rows as AuditLogRow[]).map((r) => ({
+      id: r.id,
+      action: r.action,
+      targetType: r.target_type,
+      targetId: r.target_id,
+      details: r.details,
+      createdAt: r.created_at,
+      actorEmail: r.actor_email,
+    }));
   });

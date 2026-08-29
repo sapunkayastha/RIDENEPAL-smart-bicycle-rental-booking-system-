@@ -15,7 +15,6 @@ function randomInt(min: number, max: number): number {
 
 const SESSION_DAYS = 7;
 const OTP_TTL_MINUTES = 10;
-
 type UserRow = {
   id: string;
   email: string;
@@ -23,8 +22,9 @@ type UserRow = {
   google_id: string | null;
   full_name: string | null;
   otp_verified: number;
+  failed_login_attempts?: number;
+  locked_until?: string | null;
 };
-
 async function getPool() {
   return (await import("@/lib/mysql/db.server")).default;
 }
@@ -86,12 +86,17 @@ export const signInWithPassword = createServerFn({ method: "POST" })
     const pool = await getPool();
     const email = data.email.toLowerCase().trim();
     const [rows] = await pool.query(
-      "SELECT id, password_hash, google_id FROM users WHERE email = :email",
+      "SELECT id, password_hash, google_id, failed_login_attempts, locked_until FROM users WHERE email = :email",
       { email },
     );
     const user = (rows as UserRow[])[0];
 
     if (!user) throw new Error("No account found with this email. Try signing up instead.");
+
+    if (user.locked_until && new Date(user.locked_until) > new Date()) {
+      const mins = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
+      throw new Error(`Too many failed attempts. Try again in ${mins} minute(s).`);
+    }
 
     if (!user.password_hash) {
       if (user.google_id) {
@@ -101,13 +106,29 @@ export const signInWithPassword = createServerFn({ method: "POST" })
     }
 
     const valid = await verifyPassword(data.password, user.password_hash);
-    if (!valid) throw new Error("Incorrect password. Try again.");
+    if (!valid) {
+      const attempts = (user.failed_login_attempts ?? 0) + 1;
+      if (attempts >= 5) {
+        await pool.execute(
+          "UPDATE users SET failed_login_attempts = :attempts, locked_until = DATE_ADD(NOW(), INTERVAL 15 MINUTE) WHERE id = :id",
+          { attempts, id: user.id },
+        );
+        throw new Error("Too many failed attempts. Account locked for 15 minutes.");
+      }
+      await pool.execute("UPDATE users SET failed_login_attempts = :attempts WHERE id = :id", {
+        attempts,
+        id: user.id,
+      });
+      throw new Error("Incorrect password. Try again.");
+    }
 
-    await pool.execute("UPDATE users SET last_sign_in_at = NOW() WHERE id = :id", { id: user.id });
+    await pool.execute(
+      "UPDATE users SET last_sign_in_at = NOW(), failed_login_attempts = 0, locked_until = NULL WHERE id = :id",
+      { id: user.id },
+    );
     await createSession(user.id);
     return { ok: true };
   });
-
 export const logout = createServerFn({ method: "POST" }).handler(async () => {
   const token = getSessionCookie();
   if (token) {
@@ -204,6 +225,19 @@ export const sendOtp = createServerFn({ method: "POST" })
     const user = (rows as UserRow[])[0];
     if (!user) throw new Error("User not found");
 
+    const [recentRows] = await pool.query(
+      "SELECT created_at FROM otp_codes WHERE user_id = :userId ORDER BY created_at DESC LIMIT 1",
+      { userId: context.userId },
+    );
+    const recent = (recentRows as { created_at: string }[])[0];
+    if (recent) {
+      const elapsed = Date.now() - new Date(recent.created_at).getTime();
+      if (elapsed < 60_000) {
+        const wait = Math.ceil((60_000 - elapsed) / 1000);
+        throw new Error(`Please wait ${wait}s before requesting another code.`);
+      }
+    }
+
     const code = String(randomInt(100000, 999999));
     await pool.execute(
       "INSERT INTO otp_codes (user_id, code, expires_at) VALUES (:userId, :code, DATE_ADD(NOW(), INTERVAL :mins MINUTE))",
@@ -212,7 +246,6 @@ export const sendOtp = createServerFn({ method: "POST" })
     console.log(`\n🔐 [DEV OTP] Code for ${user.email}: ${code}\n`);
     return { ok: true };
   });
-
 export const verifyOtpCode = createServerFn({ method: "POST" })
   .middleware([requireMysqlAuth])
   .inputValidator((input) => z.object({ code: z.string().length(6) }).parse(input))

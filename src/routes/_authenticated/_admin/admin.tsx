@@ -11,11 +11,29 @@ import {
   myRole,
   listPendingBookings,
   verifyBookingPayment,
+  listActiveBookings,
+  completeBooking,
+  listCancelledBookings,
+  refundBooking,
+  listAuditLog,
 } from "@/lib/admin.functions";
+import { cancelBooking } from "@/lib/bookings.functions";
 import { roleLabel, type AppRole } from "@/lib/roles";
-import { ShieldCheck, Users, CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
+import {
+  ShieldCheck,
+  Users,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Clock,
+  Bike,
+  RotateCcw,
+  History,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+
+const PAGE_SIZE = 10;
 
 export const Route = createFileRoute("/_authenticated/_admin/admin")({
   component: AdminDashboard,
@@ -68,15 +86,76 @@ function AdminDashboard() {
       toast.success("Booking verified and activated");
       qc.invalidateQueries({ queryKey: ["admin-pending-bookings"] });
       qc.invalidateQueries({ queryKey: ["admin-customers"] });
+      qc.invalidateQueries({ queryKey: ["admin-audit-log"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to verify booking"),
   });
 
-  const rows = (data ?? []).filter((c) => {
+  const fetchActiveBookings = useServerFn(listActiveBookings);
+  const complete = useServerFn(completeBooking);
+  const cancelBookingAdmin = useServerFn(cancelBooking);
+
+  const { data: activeBookings } = useQuery({
+    queryKey: ["admin-active-bookings"],
+    queryFn: () => fetchActiveBookings(),
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: (vars: { bookingId: string }) => complete({ data: vars }),
+    onSuccess: () => {
+      toast.success("Ride marked completed");
+      qc.invalidateQueries({ queryKey: ["admin-active-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-audit-log"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to complete ride"),
+  });
+
+  const cancelAdminMutation = useMutation({
+    mutationFn: (id: string) => cancelBookingAdmin({ data: { id } }),
+    onSuccess: () => {
+      toast.success("Booking cancelled");
+      qc.invalidateQueries({ queryKey: ["admin-active-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-pending-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-cancelled-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-audit-log"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to cancel booking"),
+  });
+
+  const fetchCancelledBookings = useServerFn(listCancelledBookings);
+  const refund = useServerFn(refundBooking);
+
+  const { data: cancelledBookings } = useQuery({
+    queryKey: ["admin-cancelled-bookings"],
+    queryFn: () => fetchCancelledBookings(),
+  });
+
+  const refundMutation = useMutation({
+    mutationFn: (vars: { bookingId: string; notes?: string }) => refund({ data: vars }),
+    onSuccess: () => {
+      toast.success("Booking marked refunded");
+      qc.invalidateQueries({ queryKey: ["admin-cancelled-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-audit-log"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to mark refunded"),
+  });
+
+  const fetchAuditLog = useServerFn(listAuditLog);
+  const { data: auditLog } = useQuery({
+    queryKey: ["admin-audit-log"],
+    queryFn: () => fetchAuditLog(),
+  });
+
+  const [page, setPage] = useState(1);
+
+  const filteredRows = (data ?? []).filter((c) => {
     const t = q.trim().toLowerCase();
     if (!t) return true;
     return [c.email, c.fullName, c.phone].some((v) => v?.toLowerCase().includes(t));
   });
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const rows = filteredRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const verifiedCount = (data ?? []).filter((c) => c.otpVerified).length;
   const staffCount = (data ?? []).filter(
@@ -95,6 +174,9 @@ function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
+            <Link to="/tracking" className="text-sm font-medium text-primary hover:underline">
+              Live Tracking →
+            </Link>
             <Link to="/manage-bikes" className="text-sm font-medium text-primary hover:underline">
               Manage Bikes →
             </Link>
@@ -167,7 +249,10 @@ function AdminDashboard() {
           <Input
             placeholder="Search by email, name or phone…"
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
 
@@ -269,6 +354,141 @@ function AdminDashboard() {
                 )}
               </tbody>
             </table>
+          </Card>
+        )}
+
+        {filteredRows.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-xs text-muted-foreground">
+              Page {currentPage} of {totalPages} · {filteredRows.length} accounts
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {activeBookings && activeBookings.length > 0 && (
+          <Card className="p-5 border-0 shadow-sm mt-8">
+            <h2 className="font-semibold flex items-center gap-2 mb-4">
+              <Bike className="size-4 text-primary" /> Active Rides ({activeBookings.length})
+            </h2>
+            <div className="space-y-3">
+              {activeBookings.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border rounded-lg px-4 py-3"
+                >
+                  <div>
+                    <div className="font-medium text-sm">
+                      {b.bikeName} · {b.customerName ?? b.customerEmail}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {b.customerEmail} · NPR {Number(b.totalAmount).toFixed(0)} · Ends{" "}
+                      {new Date(b.endDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      disabled={cancelAdminMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm("Cancel this active ride?")) {
+                          cancelAdminMutation.mutate(b.id);
+                        }
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-primary hover:bg-primary/90"
+                      disabled={completeMutation.isPending}
+                      onClick={() => completeMutation.mutate({ bookingId: b.id })}
+                    >
+                      {completeMutation.isPending ? "Saving…" : "Mark Completed"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {cancelledBookings && cancelledBookings.length > 0 && (
+          <Card className="p-5 border-0 shadow-sm mt-8">
+            <h2 className="font-semibold flex items-center gap-2 mb-4">
+              <RotateCcw className="size-4 text-primary" /> Cancelled — Awaiting Refund (
+              {cancelledBookings.length})
+            </h2>
+            <div className="space-y-3">
+              {cancelledBookings.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border rounded-lg px-4 py-3"
+                >
+                  <div>
+                    <div className="font-medium text-sm">
+                      {b.bikeName} · {b.customerName ?? b.customerEmail}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {b.customerEmail} · NPR {Number(b.totalAmount).toFixed(0)} · Cancelled{" "}
+                      {b.cancelledAt ? new Date(b.cancelledAt).toLocaleDateString() : "—"}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={refundMutation.isPending}
+                    onClick={() => {
+                      const notes = window.prompt("Optional refund note:") ?? undefined;
+                      refundMutation.mutate({ bookingId: b.id, notes: notes || undefined });
+                    }}
+                  >
+                    Mark Refunded
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {auditLog && auditLog.length > 0 && (
+          <Card className="p-5 border-0 shadow-sm mt-8">
+            <h2 className="font-semibold flex items-center gap-2 mb-4">
+              <History className="size-4 text-primary" /> Recent Activity
+            </h2>
+            <div className="space-y-2 text-xs">
+              {auditLog.map((a) => (
+                <div key={a.id} className="flex items-center justify-between border-b pb-2">
+                  <span>
+                    <span className="font-medium">{a.actorEmail}</span> —{" "}
+                    {a.action.replace(/_/g, " ")}
+                    {a.details ? `: ${a.details}` : ""}
+                  </span>
+                  <span className="text-muted-foreground shrink-0 ml-2">
+                    {new Date(a.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
           </Card>
         )}
       </main>

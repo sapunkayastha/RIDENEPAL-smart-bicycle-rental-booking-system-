@@ -142,16 +142,11 @@ export function AiChatBubble() {
             )}
 
             {messages.map((m) => {
-              const text = m.parts
-                .map((p) => (p.type === "text" ? p.text : ""))
-                .join("");
+              const text = m.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
               return (
                 <div
                   key={m.id}
-                  className={cn(
-                    "flex",
-                    m.role === "user" ? "justify-end" : "justify-start",
-                  )}
+                  className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
                 >
                   <div
                     className={cn(
@@ -161,9 +156,7 @@ export function AiChatBubble() {
                         : "bg-background border rounded-bl-sm",
                     )}
                   >
-                    {text || (
-                      <span className="text-muted-foreground italic">…</span>
-                    )}
+                    {text || <span className="text-muted-foreground italic">…</span>}
                   </div>
                 </div>
               );
