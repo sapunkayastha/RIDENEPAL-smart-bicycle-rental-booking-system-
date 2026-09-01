@@ -17,16 +17,23 @@ type BikeRow = {
 export const listAvailableBikes = createServerFn({ method: "GET" }).handler(async () => {
   const pool = (await import("@/lib/mysql/db.server")).default;
   const [rows] = await pool.query(
-    "SELECT * FROM bikes WHERE available = TRUE ORDER BY price_per_day ASC",
+    `SELECT bk.*, u.full_name AS vendor_name
+     FROM bikes bk LEFT JOIN users u ON u.id = bk.vendor_id
+     WHERE bk.available = TRUE ORDER BY bk.price_per_day ASC`,
   );
-  return rows as BikeRow[];
+  return rows as (BikeRow & { vendor_name: string | null })[];
 });
 
 export const getBike = createServerFn({ method: "GET" })
   .inputValidator((input) => z.object({ id: z.string().uuid() }).parse(input))
   .handler(async ({ data }) => {
     const pool = (await import("@/lib/mysql/db.server")).default;
-    const [rows] = await pool.query("SELECT * FROM bikes WHERE id = :id", { id: data.id });
+    const [rows] = await pool.query(
+      `SELECT bk.*, u.full_name AS vendor_name
+       FROM bikes bk LEFT JOIN users u ON u.id = bk.vendor_id
+       WHERE bk.id = :id`,
+      { id: data.id },
+    );
     const bike = (rows as BikeRow[])[0];
     if (!bike) throw new Error("Bike not found");
     return bike;

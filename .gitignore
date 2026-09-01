@@ -37,3 +37,4 @@ dist-ssr
 !.env.example
 
 supabase/.temp/
+public/uploads/*

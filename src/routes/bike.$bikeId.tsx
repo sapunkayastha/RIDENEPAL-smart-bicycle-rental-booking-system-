@@ -29,22 +29,13 @@ export const Route = createFileRoute("/bike/$bikeId")({
   head: () => ({ meta: [{ title: "Bike Details — RIDENEPAL" }] }),
 });
 
-// TODO: Replace with your actual shop/hub locations and coordinates.
-// These are placeholder Kathmandu/Pokhara coordinates for demo purposes.
 export const PICKUP_LOCATIONS = [
   {
-    id: "thamel",
-    name: "RideNepal Thamel Hub",
-    address: "Narsingh Chowk, Thamel, Kathmandu 44600",
-    lat: 27.7154,
-    lng: 85.3123,
-  },
-  {
-    id: "pokhara",
-    name: "RideNepal Lakeside Hub",
-    address: "Lakeside Road, Pokhara-6, Kaski",
-    lat: 28.2096,
-    lng: 83.9586,
+    id: "wheel-of-life",
+    name: "Wheel of Life MTB Shop",
+    address: "Paknajol Marg, Kathmandu 44600",
+    lat: 27.7141765,
+    lng: 85.2729905,
   },
 ] as const;
 
@@ -63,6 +54,7 @@ type BikeRow = {
   description: string | null;
   available: number | boolean;
   specs: Record<string, string | number | null> | null;
+  vendor_name?: string | null;
 };
 
 const durationOptions = [
@@ -188,6 +180,9 @@ function BikeDetail() {
               </span>
             )}
           </div>
+          {bike.vendor_name && (
+            <p className="text-sm text-muted-foreground mb-4">Listed by {bike.vendor_name}</p>
+          )}
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2 aspect-[4/3] rounded-lg overflow-hidden bg-muted">
               <img src={img} alt={bike.name} className="w-full h-full object-cover" />

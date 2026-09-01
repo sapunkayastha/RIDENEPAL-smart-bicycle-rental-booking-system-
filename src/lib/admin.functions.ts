@@ -207,6 +207,7 @@ type ActiveBookingRow = {
   total_amount: number;
   start_date: string;
   end_date: string;
+  documents_verified: number;
   customer_name: string | null;
   customer_email: string;
   bike_name: string;
@@ -218,7 +219,7 @@ export const listActiveBookings = createServerFn({ method: "GET" })
     await assertStaff(context.userId);
     const pool = (await import("@/lib/mysql/db.server")).default;
     const [rows] = await pool.query(
-      `SELECT b.id, b.status, b.total_amount, b.start_date, b.end_date,
+      `SELECT b.id, b.status, b.total_amount, b.start_date, b.end_date, b.documents_verified,
               u.full_name AS customer_name, u.email AS customer_email,
               bk.name AS bike_name
        FROM bookings b
@@ -233,10 +234,26 @@ export const listActiveBookings = createServerFn({ method: "GET" })
       totalAmount: r.total_amount,
       startDate: r.start_date,
       endDate: r.end_date,
+      documentsVerified: !!r.documents_verified,
       customerName: r.customer_name,
       customerEmail: r.customer_email,
       bikeName: r.bike_name,
     }));
+  });
+
+export const markDocumentsVerified = createServerFn({ method: "POST" })
+  .middleware([requireMysqlAuth])
+  .inputValidator((input: { bookingId: string }) => {
+    if (!input?.bookingId) throw new Error("bookingId is required");
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    await pool.execute("UPDATE bookings SET documents_verified = TRUE WHERE id = :id", {
+      id: data.bookingId,
+    });
+    return { ok: true };
   });
 
 export const completeBooking = createServerFn({ method: "POST" })

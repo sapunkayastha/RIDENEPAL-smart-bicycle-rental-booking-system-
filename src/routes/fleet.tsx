@@ -43,6 +43,7 @@ type Bike = {
   image_url: string | null;
   description: string | null;
   available: boolean | number;
+  vendor_name?: string | null;
 };
 
 function Fleet() {
@@ -50,7 +51,8 @@ function Fleet() {
   const search = Route.useSearch();
   const [pickup, setPickup] = useState(search.pickup ?? "Kathmandu");
   const [days, setDays] = useState(1);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [startDate, setStartDate] = useState(search.date ?? new Date().toISOString().slice(0, 16));
+  const [selectedType, setSelectedType] = useState<string | null>(null);
 
   const fetchBikes = useServerFn(listAvailableBikes);
   const fetchMe = useServerFn(me);
@@ -63,12 +65,10 @@ function Fleet() {
   const availableTypes = Array.from(new Set((bikes ?? []).map((b) => b.type))).sort();
 
   const filteredBikes =
-    selectedTypes.length === 0 ? bikes : bikes?.filter((b) => selectedTypes.includes(b.type));
+    selectedType === null ? bikes : bikes?.filter((b) => b.type === selectedType);
 
   function toggleType(type: string) {
-    setSelectedTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
-    );
+    setSelectedType((prev) => (prev === type ? null : type));
   }
 
   const bookingMutation = useMutation({
@@ -78,7 +78,10 @@ function Fleet() {
         navigate({ to: "/auth" });
         throw new Error("Please sign in to book");
       }
-      const start = new Date();
+      const start = new Date(startDate);
+      if (isNaN(start.getTime()) || start < new Date(Date.now() - 60_000)) {
+        throw new Error("Please choose a valid start date and time.");
+      }
       const end = new Date(start.getTime() + days * 24 * 3600 * 1000);
       return book({
         data: {
@@ -113,6 +116,14 @@ function Fleet() {
               onChange={(e) => setPickup(e.target.value)}
               maxLength={100}
             />
+            <label className="text-xs text-muted-foreground">Start date & time</label>
+            <Input
+              className="mt-1 mb-3"
+              type="datetime-local"
+              value={startDate}
+              min={new Date().toISOString().slice(0, 16)}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
             <label className="text-xs text-muted-foreground">Number of days</label>
             <Input
               className="mt-1"
@@ -128,16 +139,13 @@ function Fleet() {
             <div className="space-y-2 text-sm">
               {availableTypes.map((t) => (
                 <label key={t} className="flex items-center gap-2 capitalize cursor-pointer">
-                  <Checkbox
-                    checked={selectedTypes.includes(t)}
-                    onCheckedChange={() => toggleType(t)}
-                  />
+                  <Checkbox checked={selectedType === t} onCheckedChange={() => toggleType(t)} />
                   {t}
                 </label>
               ))}
-              {selectedTypes.length > 0 && (
+              {selectedType !== null && (
                 <button
-                  onClick={() => setSelectedTypes([])}
+                  onClick={() => setSelectedType(null)}
                   className="text-xs text-primary hover:underline mt-1"
                 >
                   Clear filters
@@ -202,6 +210,9 @@ function Fleet() {
                     >
                       {b.name}
                     </Link>
+                    {b.vendor_name && (
+                      <p className="text-[11px] text-muted-foreground">by {b.vendor_name}</p>
+                    )}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 mb-3">
                       <Star className="size-3 fill-current text-primary" /> 4.8 ·{" "}
                       {b.description?.slice(0, 40) ?? "Premium bike"}

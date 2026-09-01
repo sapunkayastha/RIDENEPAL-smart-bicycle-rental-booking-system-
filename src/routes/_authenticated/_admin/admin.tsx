@@ -13,6 +13,7 @@ import {
   verifyBookingPayment,
   listActiveBookings,
   completeBooking,
+  markDocumentsVerified,
   listCancelledBookings,
   refundBooking,
   listAuditLog,
@@ -108,6 +109,16 @@ function AdminDashboard() {
       qc.invalidateQueries({ queryKey: ["admin-audit-log"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to complete ride"),
+  });
+
+  const markDocs = useServerFn(markDocumentsVerified);
+  const markDocsMutation = useMutation({
+    mutationFn: (bookingId: string) => markDocs({ data: { bookingId } }),
+    onSuccess: () => {
+      toast.success("Documents marked as verified");
+      qc.invalidateQueries({ queryKey: ["admin-active-bookings"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update"),
   });
 
   const cancelAdminMutation = useMutation({
@@ -401,6 +412,21 @@ function AdminDashboard() {
                     <div className="text-xs text-muted-foreground">
                       {b.customerEmail} · NPR {Number(b.totalAmount).toFixed(0)} · Ends{" "}
                       {new Date(b.endDate).toLocaleDateString()}
+                    </div>
+                    <div className="mt-1">
+                      {b.documentsVerified ? (
+                        <span className="text-[10px] font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                          ✓ Documents verified at pickup
+                        </span>
+                      ) : (
+                        <button
+                          className="text-[10px] font-semibold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full hover:bg-yellow-200"
+                          disabled={markDocsMutation.isPending}
+                          onClick={() => markDocsMutation.mutate(b.id)}
+                        >
+                          Mark documents verified
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">

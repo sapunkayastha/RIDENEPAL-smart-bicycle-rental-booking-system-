@@ -1,4 +1,5 @@
 import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
@@ -6,7 +7,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { listMyBookings, cancelBooking } from "@/lib/bookings.functions";
 import { myRole } from "@/lib/auth.functions";
-import { Bike, MapPin, Calendar, Sparkles, Clock, X } from "lucide-react";
+import { submitVendorReview } from "@/lib/vendor.functions";
+import { Bike, MapPin, Calendar, Sparkles, Clock, X, Star } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -48,6 +50,22 @@ function Dashboard() {
       cancelMutation.mutate(id);
     }
   }
+
+  const [reviewFor, setReviewFor] = useState<string | null>(null);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const submitReview = useServerFn(submitVendorReview);
+  const reviewMutation = useMutation({
+    mutationFn: (id: string) => submitReview({ data: { bookingId: id, rating, comment } }),
+    onSuccess: () => {
+      toast.success("Thanks for your review!");
+      setReviewFor(null);
+      setComment("");
+      setRating(5);
+      qc.invalidateQueries({ queryKey: ["my-bookings"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not submit review"),
+  });
 
   const active = bookings?.find((b) => b.status === "paid" || b.status === "active");
 
@@ -148,6 +166,46 @@ function Dashboard() {
                   )}
                 </div>
               </div>
+              {b.status === "completed" && (
+                <div className="mt-3 pt-3 border-t">
+                  {reviewFor === b.id ? (
+                    <div className="space-y-2">
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button key={n} onClick={() => setRating(n)}>
+                            <Star
+                              className={`size-4 ${n <= rating ? "fill-primary text-primary" : "text-muted-foreground"}`}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        className="w-full text-xs border rounded-md p-2"
+                        placeholder="How was your ride?"
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="bg-primary hover:bg-primary/90"
+                          disabled={reviewMutation.isPending}
+                          onClick={() => reviewMutation.mutate(b.id)}
+                        >
+                          Submit
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setReviewFor(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setReviewFor(b.id)}>
+                      <Star className="size-3.5 mr-1" /> Leave a Review
+                    </Button>
+                  )}
+                </div>
+              )}
             </Card>
           ))}
         </div>
