@@ -28,27 +28,25 @@ type BookingRow = {
 // (no vendor_id) keep the full amount as platform revenue.
 async function applyCommission(bookingId: string) {
   const pool = (await import("@/lib/mysql/db.server")).default;
-  const [rows] = await pool.query(
-    `SELECT b.total_amount, bk.vendor_id
-     FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
-     WHERE b.id = :id`,
-    { id: bookingId },
-  );
-  const row = (rows as { total_amount: number; vendor_id: string | null }[])[0];
+  const [rows] = await pool.query("SELECT total_amount FROM bookings WHERE id = :id", {
+    id: bookingId,
+  });
+  const row = (rows as { total_amount: number }[])[0];
   if (!row) return;
 
   const total = Number(row.total_amount);
-  let commission = total;
-  let payout = 0;
 
-  if (row.vendor_id) {
-    const [settingsRows] = await pool.query(
-      "SELECT commission_rate FROM platform_settings WHERE id = 1",
-    );
-    const rate = Number((settingsRows as { commission_rate: number }[])[0]?.commission_rate ?? 15);
-    commission = Math.round(total * (rate / 100) * 100) / 100;
-    payout = Math.round((total - commission) * 100) / 100;
-  }
+  const [settingsRows] = await pool.query(
+    "SELECT commission_rate FROM platform_settings WHERE id = 1",
+  );
+  const rate = Number((settingsRows as { commission_rate: number }[])[0]?.commission_rate ?? 15);
+
+  // Always split by the configured rate — your cut is always exactly
+  // rate% of the total, whether the bike is platform-owned or listed
+  // by a vendor. The remainder goes to that bike's account (the
+  // vendor's, or the managing admin's for platform-owned bikes).
+  const commission = Math.round(total * (rate / 100) * 100) / 100;
+  const payout = Math.round((total - commission) * 100) / 100;
 
   await pool.execute(
     "UPDATE bookings SET platform_commission = :commission, vendor_payout = :payout WHERE id = :id",

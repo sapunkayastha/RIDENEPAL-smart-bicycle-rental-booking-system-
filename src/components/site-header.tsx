@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { myRole, logout } from "@/lib/auth.functions";
 import { me } from "@/lib/auth.functions";
 import { UserMenu } from "@/components/user-menu";
+import { NotificationBell } from "@/components/notification-bell";
 import { useNavigate } from "@tanstack/react-router";
 
 export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
@@ -58,9 +59,6 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
           <Link to="/fleet" search={{ pickup: undefined, date: undefined }} className={linkCls}>
             Fleet
           </Link>
-          <Link to="/vendor-register" className={linkCls}>
-            Become a Vendor
-          </Link>
           <Link to="/bulk-rent" className={linkCls}>
             Bulk Rent
           </Link>
@@ -73,12 +71,15 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
         </nav>
         <div className="flex items-center gap-3">
           {user ? (
-            <UserMenu
-              linkCls={linkCls}
-              isStaff={roleFlags?.isStaff ?? false}
-              isSuperAdmin={roleFlags?.isSuperAdmin ?? false}
-              onSignOut={handleSignOut}
-            />
+            <>
+              <NotificationBell linkCls={linkCls} />
+              <UserMenu
+                linkCls={linkCls}
+                isStaff={roleFlags?.isStaff ?? false}
+                isSuperAdmin={roleFlags?.isSuperAdmin ?? false}
+                onSignOut={handleSignOut}
+              />
+            </>
           ) : (
             <Link
               to="/auth"

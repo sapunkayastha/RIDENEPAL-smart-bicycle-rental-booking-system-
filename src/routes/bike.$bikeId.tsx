@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ShieldCheck,
   Sparkles,
@@ -63,6 +64,83 @@ const durationOptions = [
   { label: "1 week", days: 7 },
 ];
 
+// Same in-browser compression already used for vendor ID uploads and
+// bike photos — no separate file storage, just a base64 data URL.
+function resizeImageToDataUrl(file: File, maxWidth = 1200, quality = 0.8): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read file"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Could not load image"));
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("Canvas not supported"));
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function ImageUploadField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (dataUrl: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      onChange(await resizeImageToDataUrl(file));
+    } catch {
+      toast.error("Could not process that image, try a different file");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div>
+      <label className="text-xs text-muted-foreground">{label}</label>
+      <div className="flex items-center gap-3 mt-1">
+        {value && (
+          <img
+            src={value}
+            alt={label}
+            className="w-16 h-12 rounded-md object-cover border shrink-0"
+          />
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleChange}
+          disabled={uploading}
+          className="text-xs file:mr-2 file:px-2.5 file:py-1 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:text-[11px] file:font-medium file:cursor-pointer cursor-pointer"
+        />
+      </div>
+      {uploading && (
+        <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-1">
+          <Loader2 className="size-3 animate-spin" /> Processing…
+        </p>
+      )}
+    </div>
+  );
+}
+
 function BikeDetail() {
   const { bikeId } = Route.useParams();
   const navigate = useNavigate();
@@ -70,6 +148,17 @@ function BikeDetail() {
   const [pickupId, setPickupId] = useState<string>(PICKUP_LOCATIONS[0].id);
   const pickupLocation = PICKUP_LOCATIONS.find((l) => l.id === pickupId) ?? PICKUP_LOCATIONS[0];
   const [days, setDays] = useState(1);
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 16));
+
+  const [showAgreement, setShowAgreement] = useState(false);
+  const [agreement, setAgreement] = useState({
+    fullName: "",
+    address: "",
+    phone: "",
+    citizenshipNumber: "",
+  });
+  const [frontImage, setFrontImage] = useState<string | null>(null);
+  const [backImage, setBackImage] = useState<string | null>(null);
 
   const fetchMyRole = useServerFn(myRole);
   const { data: roleData } = useQuery({
@@ -101,7 +190,20 @@ function BikeDetail() {
         navigate({ to: "/auth" });
         throw new Error("Please sign in to book");
       }
-      const start = new Date();
+      const start = new Date(startDate);
+      if (isNaN(start.getTime()) || start < new Date(Date.now() - 60_000)) {
+        throw new Error("Please choose a valid pickup date and time");
+      }
+      if (!agreement.fullName.trim() || !agreement.address.trim() || !agreement.phone.trim()) {
+        throw new Error("Please fill in all your details");
+      }
+      if (!agreement.citizenshipNumber.trim()) {
+        throw new Error("Citizenship number is required");
+      }
+      if (!frontImage || !backImage) {
+        throw new Error("Please upload both sides of your citizenship card");
+      }
+
       const end = new Date(start.getTime() + days * 24 * 3600 * 1000);
       return book({
         data: {
@@ -109,6 +211,12 @@ function BikeDetail() {
           start_date: start.toISOString(),
           end_date: end.toISOString(),
           pickup_location: `${pickupLocation.name} — ${pickupLocation.address}`,
+          renter_full_name: agreement.fullName,
+          renter_address: agreement.address,
+          renter_phone: agreement.phone,
+          citizenship_number: agreement.citizenshipNumber,
+          citizenship_front_image: frontImage,
+          citizenship_back_image: backImage,
         },
       });
     },
@@ -156,6 +264,13 @@ function BikeDetail() {
       ? fallbackImgs[0]
       : bike.image_url;
   const total = Number(bike.price_per_day) * days;
+  const agreementComplete =
+    agreement.fullName.trim() &&
+    agreement.address.trim() &&
+    agreement.phone.trim() &&
+    agreement.citizenshipNumber.trim() &&
+    frontImage &&
+    backImage;
 
   return (
     <div className="min-h-screen bg-background">
@@ -262,6 +377,16 @@ function BikeDetail() {
             >
               View on map →
             </a>
+
+            <label className="text-xs text-muted-foreground block mt-3">PICKUP DATE & TIME</label>
+            <Input
+              type="datetime-local"
+              className="mt-1"
+              value={startDate}
+              min={new Date().toISOString().slice(0, 16)}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+
             <label className="text-xs text-muted-foreground block mt-3">DURATION</label>
             <select
               className="w-full border rounded-md px-3 py-2 mt-1 mb-4 text-sm bg-background"
@@ -284,19 +409,84 @@ function BikeDetail() {
               <span className="text-sm">Total Estimate</span>
               <span className="text-2xl font-bold text-primary">NPR {total.toFixed(0)}</span>
             </div>
+
             {isStaff ? (
               <p className="text-xs text-muted-foreground bg-secondary/70 rounded-md px-3 py-2 text-center">
                 Admin and Super Admin accounts can't book rides. Sign in with a customer account to
                 book.
               </p>
-            ) : (
+            ) : !showAgreement ? (
               <Button
                 className="w-full bg-primary hover:bg-primary/90"
-                disabled={!bike.available || bookingMutation.isPending}
-                onClick={() => bookingMutation.mutate()}
+                disabled={!bike.available}
+                onClick={() => setShowAgreement(true)}
               >
-                {bookingMutation.isPending ? "Booking…" : "Confirm Booking"}
+                Continue to Rental Details
               </Button>
+            ) : (
+              <div className="space-y-3 border-t pt-4 mt-1">
+                <h4 className="font-semibold text-sm">Renter Details</h4>
+                <p className="text-[11px] text-muted-foreground -mt-1">
+                  Required before your booking is confirmed.
+                </p>
+                <div>
+                  <label className="text-xs text-muted-foreground">Full name</label>
+                  <Input
+                    value={agreement.fullName}
+                    onChange={(e) => setAgreement((a) => ({ ...a, fullName: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Address</label>
+                  <Input
+                    value={agreement.address}
+                    onChange={(e) => setAgreement((a) => ({ ...a, address: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Phone number</label>
+                  <Input
+                    value={agreement.phone}
+                    onChange={(e) => setAgreement((a) => ({ ...a, phone: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">Citizenship number</label>
+                  <Input
+                    value={agreement.citizenshipNumber}
+                    onChange={(e) =>
+                      setAgreement((a) => ({ ...a, citizenshipNumber: e.target.value }))
+                    }
+                  />
+                </div>
+                <ImageUploadField
+                  label="Citizenship photo — front"
+                  value={frontImage}
+                  onChange={setFrontImage}
+                />
+                <ImageUploadField
+                  label="Citizenship photo — back"
+                  value={backImage}
+                  onChange={setBackImage}
+                />
+
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setShowAgreement(false)}
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    className="flex-1 bg-primary hover:bg-primary/90"
+                    disabled={!agreementComplete || bookingMutation.isPending}
+                    onClick={() => bookingMutation.mutate()}
+                  >
+                    {bookingMutation.isPending ? "Booking…" : "Confirm Booking"}
+                  </Button>
+                </div>
+              </div>
             )}
           </Card>
 

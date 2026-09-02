@@ -185,6 +185,19 @@ function AdminDashboard() {
             </h1>
           </div>
           <div className="flex items-center gap-4">
+            {isSuperAdmin && (
+              <>
+                <Link to="/vendors" className="text-sm font-medium text-primary hover:underline">
+                  Vendor Applications →
+                </Link>
+                <Link
+                  to="/commissions"
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Commissions →
+                </Link>
+              </>
+            )}
             <Link to="/tracking" className="text-sm font-medium text-primary hover:underline">
               Live Tracking →
             </Link>
@@ -331,22 +344,21 @@ function AdminDashboard() {
                         <td className="px-4 py-3 text-right">
                           {isSelf ? (
                             <span className="text-xs text-muted-foreground">This is you</span>
-                          ) : (
-                            <select
-                              className="border rounded-md text-xs px-2 py-1.5 bg-background"
-                              value={role}
+                          ) : role === "super_admin" ? (
+                            <span className="text-xs text-muted-foreground">Locked</span>
+                          ) : role === "admin" ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
                               disabled={roleMutation.isPending}
-                              onChange={(e) =>
-                                roleMutation.mutate({
-                                  userId: c.id,
-                                  role: e.target.value as AppRole,
-                                })
+                              onClick={() =>
+                                roleMutation.mutate({ userId: c.id, role: "customer" })
                               }
                             >
-                              <option value="customer">Customer</option>
-                              <option value="admin">Admin</option>
-                              <option value="super_admin">Super Admin</option>
-                            </select>
+                              Revoke Admin Access
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Customer</span>
                           )}
                         </td>
                       )}

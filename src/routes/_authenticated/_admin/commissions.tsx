@@ -128,7 +128,7 @@ function Commissions() {
                 {summary?.bookings.map((b) => (
                   <tr key={b.id} className="border-b last:border-0">
                     <td className="py-2 pr-4">{b.bike_name}</td>
-                    <td className="py-2 pr-4">{b.vendor_name ?? "RideNepal (platform)"}</td>
+                    <td className="py-2 pr-4">{b.vendor_name ?? "Managing Admin"}</td>
                     <td className="py-2 pr-4 text-right">
                       NPR {Number(b.total_amount).toFixed(0)}
                     </td>

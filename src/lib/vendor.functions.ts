@@ -74,6 +74,13 @@ export const registerVendor = createServerFn({ method: "POST" })
       },
     );
 
+    const { notifyStaff } = await import("@/lib/notifications.functions");
+    await notifyStaff({
+      title: "New vendor application",
+      body: `${data.businessName} applied to become a vendor.`,
+      link: "/vendors",
+    });
+
     return { ok: true };
   });
 
@@ -116,6 +123,13 @@ export const applyAsVendorSelf = createServerFn({ method: "POST" })
         idDocument: data.idDocument,
       },
     );
+
+    const { notifyStaff } = await import("@/lib/notifications.functions");
+    await notifyStaff({
+      title: "New vendor application",
+      body: `${data.businessName} applied to become a vendor.`,
+      link: "/vendors",
+    });
 
     return { ok: true };
   });
@@ -251,6 +265,27 @@ export const approveVendor = createServerFn({ method: "POST" })
       userId: data.userId,
     });
 
+    // Every new vendor that joins nudges the platform's commission
+    // rate up slightly — capped so it can never run away to something
+    // unreasonable. Superadmin can still override it manually anytime
+    // from /commissions.
+    const COMMISSION_STEP = 1; // percentage points per new vendor
+    const COMMISSION_CAP = 50; // never auto-climb past this
+    await pool.execute(
+      `UPDATE platform_settings
+       SET commission_rate = LEAST(commission_rate + :step, :cap)
+       WHERE id = 1`,
+      { step: COMMISSION_STEP, cap: COMMISSION_CAP },
+    );
+
+    const { notifyUser } = await import("@/lib/notifications.functions");
+    await notifyUser({
+      userId: data.userId,
+      title: "Vendor application approved",
+      body: "You can now list bikes for rent from your vendor dashboard.",
+      link: "/vendor-dashboard",
+    });
+
     return { ok: true };
   });
 
@@ -269,6 +304,15 @@ export const rejectVendor = createServerFn({ method: "POST" })
        WHERE user_id = :userId`,
       { userId: data.userId, reason: data.reason, reviewer: context.userId },
     );
+
+    const { notifyUser } = await import("@/lib/notifications.functions");
+    await notifyUser({
+      userId: data.userId,
+      title: "Vendor application rejected",
+      body: data.reason,
+      link: "/vendor-dashboard",
+    });
+
     return { ok: true };
   });
 

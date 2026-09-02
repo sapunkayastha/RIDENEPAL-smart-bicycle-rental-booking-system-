@@ -17,6 +17,47 @@ type BookingRow = {
   created_at: string;
 };
 
+// Grace period after the scheduled ride start before we push it back —
+// gives the customer a bit of slack before assuming they're late.
+const PICKUP_GRACE_MINUTES = 60;
+
+// If a paid booking's scheduled start has passed and the customer never
+// picked up (still 'paid', never marked 'active'/'completed'/'cancelled'),
+// push the whole window forward so they don't lose the ride time they
+// paid for. Runs lazily whenever the customer's bookings are loaded.
+async function autoExtendOverdueBookings(userId: string) {
+  const pool = (await import("@/lib/mysql/db.server")).default;
+  const [rows] = await pool.query(
+    `SELECT id, start_date, end_date FROM bookings
+     WHERE user_id = :userId AND status = 'paid'
+       AND start_date < DATE_SUB(NOW(), INTERVAL :grace MINUTE)`,
+    { userId, grace: PICKUP_GRACE_MINUTES },
+  );
+  const overdue = rows as { id: string; start_date: string; end_date: string }[];
+  if (overdue.length === 0) return;
+
+  const { notifyUser } = await import("@/lib/notifications.functions");
+
+  for (const b of overdue) {
+    const oldStart = new Date(b.start_date);
+    const oldEnd = new Date(b.end_date);
+    const durationMs = oldEnd.getTime() - oldStart.getTime();
+    const newStart = new Date();
+    const newEnd = new Date(newStart.getTime() + durationMs);
+
+    await pool.execute(
+      "UPDATE bookings SET start_date = :start, end_date = :end WHERE id = :id AND status = 'paid'",
+      { id: b.id, start: newStart, end: newEnd },
+    );
+    await notifyUser({
+      userId,
+      title: "Ride time extended",
+      body: "You didn't pick up your bike at the scheduled time, so we've pushed your ride window forward — no time lost.",
+      link: "/dashboard",
+    });
+  }
+}
+
 type BookingWithBike = {
   id: string;
   user_id: string;
@@ -46,6 +87,18 @@ export const createBooking = createServerFn({ method: "POST" })
         start_date: z.string().datetime(),
         end_date: z.string().datetime(),
         pickup_location: z.string().max(255).optional(),
+        renter_full_name: z.string().trim().min(1, "Full name is required").max(190),
+        renter_address: z.string().trim().min(1, "Address is required").max(255),
+        renter_phone: z.string().trim().min(5, "Phone number is required").max(30),
+        citizenship_number: z.string().trim().min(1, "Citizenship number is required").max(50),
+        citizenship_front_image: z
+          .string()
+          .startsWith("data:image/", "Please upload the front of your citizenship card")
+          .max(3_000_000),
+        citizenship_back_image: z
+          .string()
+          .startsWith("data:image/", "Please upload the back of your citizenship card")
+          .max(3_000_000),
       })
       .parse(input),
   )
@@ -78,8 +131,16 @@ export const createBooking = createServerFn({ method: "POST" })
 
     const bookingId = crypto.randomUUID();
     await pool.execute(
-      `INSERT INTO bookings (id, user_id, bike_id, start_date, end_date, pickup_location, total_amount, status)
-       VALUES (:id, :userId, :bikeId, :startDate, :endDate, :pickup, :total, 'pending')`,
+      `INSERT INTO bookings (
+         id, user_id, bike_id, start_date, end_date, pickup_location, total_amount, status,
+         renter_full_name, renter_address, renter_phone, citizenship_number,
+         citizenship_front_image, citizenship_back_image
+       )
+       VALUES (
+         :id, :userId, :bikeId, :startDate, :endDate, :pickup, :total, 'pending',
+         :renterFullName, :renterAddress, :renterPhone, :citizenshipNumber,
+         :citizenshipFront, :citizenshipBack
+       )`,
       {
         id: bookingId,
         userId: context.userId,
@@ -88,6 +149,12 @@ export const createBooking = createServerFn({ method: "POST" })
         endDate: data.end_date.slice(0, 19).replace("T", " "),
         pickup: data.pickup_location ?? null,
         total: total_amount,
+        renterFullName: data.renter_full_name,
+        renterAddress: data.renter_address,
+        renterPhone: data.renter_phone,
+        citizenshipNumber: data.citizenship_number,
+        citizenshipFront: data.citizenship_front_image,
+        citizenshipBack: data.citizenship_back_image,
       },
     );
 
@@ -105,6 +172,7 @@ export const createBooking = createServerFn({ method: "POST" })
 export const listMyBookings = createServerFn({ method: "GET" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
+    await autoExtendOverdueBookings(context.userId);
     const pool = await getPool();
     const [rows] = await pool.query(
       `SELECT b.*, bk.name AS bike_name, bk.image_url AS bike_image_url, bk.type AS bike_type
@@ -152,10 +220,21 @@ export const cancelBooking = createServerFn({ method: "POST" })
     const pool = await getPool();
     const { isStaff } = await getMyRoleFlags(context.userId);
 
-    const [rows] = await pool.query("SELECT id, user_id, status FROM bookings WHERE id = :id", {
-      id: data.id,
-    });
-    const booking = (rows as { id: string; user_id: string; status: string }[])[0];
+    const [rows] = await pool.query(
+      `SELECT b.id, b.user_id, b.status, b.total_amount, bk.name AS bike_name
+       FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+       WHERE b.id = :id`,
+      { id: data.id },
+    );
+    const booking = (
+      rows as {
+        id: string;
+        user_id: string;
+        status: string;
+        total_amount: number;
+        bike_name: string;
+      }[]
+    )[0];
     if (!booking) throw new Error("Booking not found");
     if (!isStaff && booking.user_id !== context.userId) {
       throw new Error("You can only cancel your own bookings");
@@ -168,6 +247,13 @@ export const cancelBooking = createServerFn({ method: "POST" })
       "UPDATE bookings SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = :actorId WHERE id = :id",
       { id: data.id, actorId: context.userId },
     );
+
+    const { notifyStaff } = await import("@/lib/notifications.functions");
+    await notifyStaff({
+      title: "Booking cancelled",
+      body: `${booking.bike_name} · NPR ${Number(booking.total_amount).toFixed(0)} was cancelled.`,
+      link: "/admin",
+    });
 
     await pool.execute(
       `INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details)

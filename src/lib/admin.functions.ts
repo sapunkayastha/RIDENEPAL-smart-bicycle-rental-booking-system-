@@ -78,6 +78,9 @@ export const setUserRole = createServerFn({ method: "POST" })
   .inputValidator((input: { userId: string; role: AppRole }) => {
     if (!input?.userId) throw new Error("userId is required");
     if (!APP_ROLES.includes(input.role)) throw new Error("Invalid role");
+    if (input.role === "super_admin") throw new Error("Super Admin cannot be assigned here");
+    if (input.role === "admin")
+      throw new Error("Admin can only be granted by approving a vendor application");
     return input;
   })
   .handler(async ({ data, context }) => {
@@ -85,6 +88,14 @@ export const setUserRole = createServerFn({ method: "POST" })
     if (data.userId === context.userId) throw new Error("You cannot change your own role");
 
     const pool = (await import("@/lib/mysql/db.server")).default;
+    const [existingRoleRows] = await pool.query(
+      "SELECT role FROM user_roles WHERE user_id = :userId",
+      { userId: data.userId },
+    );
+    if ((existingRoleRows as { role: string }[]).some((r) => r.role === "super_admin")) {
+      throw new Error("The Super Admin's role cannot be changed");
+    }
+
     await pool.execute("DELETE FROM user_roles WHERE user_id = :userId", { userId: data.userId });
     await pool.execute("INSERT INTO user_roles (user_id, role) VALUES (:userId, :role)", {
       userId: data.userId,
