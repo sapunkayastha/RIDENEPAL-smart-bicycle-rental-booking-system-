@@ -12,6 +12,7 @@ import {
   listMyVendorBikes,
   createVendorBike,
   applyAsVendorSelf,
+  getMyVendorEarnings,
 } from "@/lib/vendor.functions";
 import { toast } from "sonner";
 
@@ -162,6 +163,7 @@ function ApplyAsVendorForm() {
 function VendorDashboard() {
   const fetchProfile = useServerFn(getMyVendorProfile);
   const fetchBikes = useServerFn(listMyVendorBikes);
+  const fetchEarnings = useServerFn(getMyVendorEarnings);
   const addBike = useServerFn(createVendorBike);
   const qc = useQueryClient();
 
@@ -172,6 +174,23 @@ function VendorDashboard() {
   const { data: bikes } = useQuery({
     queryKey: ["my-vendor-bikes"],
     queryFn: () => fetchBikes() as Promise<Bike[]>,
+    enabled: profile?.status === "approved",
+  });
+  const { data: earnings } = useQuery({
+    queryKey: ["my-vendor-earnings"],
+    queryFn: () =>
+      fetchEarnings() as Promise<{
+        totals: { total_earned: number; paid_bookings: number };
+        bookings: {
+          id: string;
+          bike_name: string;
+          total_amount: number;
+          platform_commission: number;
+          vendor_payout: number;
+          status: string;
+          created_at: string;
+        }[];
+      }>,
     enabled: profile?.status === "approved",
   });
 
@@ -273,6 +292,56 @@ function VendorDashboard() {
 
         {profile.status === "approved" && (
           <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Card className="p-5 border-0 shadow-sm">
+                <div className="text-xs text-muted-foreground">Total earned</div>
+                <div className="text-2xl font-bold text-primary mt-1">
+                  NPR {Number(earnings?.totals.total_earned ?? 0).toFixed(0)}
+                </div>
+              </Card>
+              <Card className="p-5 border-0 shadow-sm">
+                <div className="text-xs text-muted-foreground">Paid bookings</div>
+                <div className="text-2xl font-bold mt-1">{earnings?.totals.paid_bookings ?? 0}</div>
+              </Card>
+            </div>
+
+            <Card className="p-5 border-0 shadow-sm">
+              <h2 className="font-semibold text-sm mb-3">Recent bookings</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted-foreground border-b">
+                      <th className="py-2 pr-4">Bike</th>
+                      <th className="py-2 pr-4">Status</th>
+                      <th className="py-2 pr-4 text-right">Total</th>
+                      <th className="py-2 pr-4 text-right">Platform fee</th>
+                      <th className="py-2 pr-4 text-right">You earned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {earnings?.bookings.map((b) => (
+                      <tr key={b.id} className="border-b last:border-0">
+                        <td className="py-2 pr-4">{b.bike_name}</td>
+                        <td className="py-2 pr-4 capitalize text-muted-foreground">{b.status}</td>
+                        <td className="py-2 pr-4 text-right">
+                          NPR {Number(b.total_amount).toFixed(0)}
+                        </td>
+                        <td className="py-2 pr-4 text-right text-muted-foreground">
+                          NPR {Number(b.platform_commission).toFixed(0)}
+                        </td>
+                        <td className="py-2 pr-4 text-right font-semibold text-primary">
+                          NPR {Number(b.vendor_payout).toFixed(0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {earnings?.bookings.length === 0 && (
+                  <p className="text-sm text-muted-foreground py-4">No bookings yet.</p>
+                )}
+              </div>
+            </Card>
+
             <Card className="p-5 border-0 shadow-sm space-y-3">
               <h2 className="font-semibold text-sm">Add a bike</h2>
               <Input

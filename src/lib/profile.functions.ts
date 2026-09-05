@@ -7,6 +7,10 @@ type ProfileRow = {
   email: string;
   full_name: string | null;
   phone: string | null;
+  address: string | null;
+  citizenship_number: string | null;
+  citizenship_front_image: string | null;
+  citizenship_back_image: string | null;
   otp_verified: number;
   created_at: string;
 };
@@ -19,7 +23,9 @@ export const getMyProfile = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const pool = (await import("@/lib/mysql/db.server")).default;
     const [profileRows] = await pool.query(
-      "SELECT id, email, full_name, phone, otp_verified, created_at FROM users WHERE id = :id",
+      `SELECT id, email, full_name, phone, address, citizenship_number,
+              citizenship_front_image, citizenship_back_image, otp_verified, created_at
+       FROM users WHERE id = :id`,
       { id: context.userId },
     );
     const profile = (profileRows as ProfileRow[])[0];
@@ -42,6 +48,10 @@ export const getMyProfile = createServerFn({ method: "GET" })
       id: context.userId,
       full_name: profile.full_name ?? "",
       phone: profile.phone ?? "",
+      address: profile.address ?? "",
+      citizenship_number: profile.citizenship_number ?? "",
+      citizenship_front_image: profile.citizenship_front_image,
+      citizenship_back_image: profile.citizenship_back_image,
       otp_verified: Boolean(profile.otp_verified),
       created_at: profile.created_at,
       email: profile.email,

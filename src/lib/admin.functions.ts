@@ -73,6 +73,130 @@ export const listCustomers = createServerFn({ method: "GET" })
     });
   });
 
+export const getCustomerDetails = createServerFn({ method: "GET" })
+  .inputValidator((input: { userId: string }) => {
+    if (!input?.userId) throw new Error("userId is required");
+    return input;
+  })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+
+    const [userRows] = await pool.query(
+      `SELECT id, email, full_name, phone, address, citizenship_number,
+              citizenship_front_image, citizenship_back_image,
+              otp_verified, email_confirmed, last_sign_in_at, created_at
+       FROM users WHERE id = :userId`,
+      { userId: data.userId },
+    );
+    const user = (
+      userRows as {
+        id: string;
+        email: string;
+        full_name: string | null;
+        phone: string | null;
+        address: string | null;
+        citizenship_number: string | null;
+        citizenship_front_image: string | null;
+        citizenship_back_image: string | null;
+        otp_verified: number;
+        email_confirmed: number;
+        last_sign_in_at: string | null;
+        created_at: string;
+      }[]
+    )[0];
+    if (!user) throw new Error("Customer not found");
+
+    const [roleRows] = await pool.query("SELECT role FROM user_roles WHERE user_id = :userId", {
+      userId: data.userId,
+    });
+
+    const [bookingRows] = await pool.query(
+      `SELECT b.id, b.status, b.total_amount, b.start_date, b.end_date, b.created_at,
+              bk.name AS bike_name,
+              b.renter_full_name, b.renter_address, b.renter_phone, b.citizenship_number,
+              b.citizenship_front_image, b.citizenship_back_image
+       FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+       WHERE b.user_id = :userId
+       ORDER BY b.created_at DESC`,
+      { userId: data.userId },
+    );
+
+    type CustomerBookingRow = {
+      id: string;
+      status: string;
+      total_amount: number;
+      start_date: string;
+      end_date: string;
+      created_at: string;
+      bike_name: string;
+      renter_full_name: string | null;
+      renter_address: string | null;
+      renter_phone: string | null;
+      citizenship_number: string | null;
+      citizenship_front_image: string | null;
+      citizenship_back_image: string | null;
+    };
+
+    return {
+      user: {
+        ...user,
+        otp_verified: Boolean(user.otp_verified),
+        email_confirmed: Boolean(user.email_confirmed),
+      },
+      roles: (roleRows as { role: string }[]).map((r) => r.role),
+      bookings: bookingRows as CustomerBookingRow[],
+    };
+  });
+
+export const deleteCustomer = createServerFn({ method: "POST" })
+  .inputValidator((input: { userId: string }) => {
+    if (!input?.userId) throw new Error("userId is required");
+    return input;
+  })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ data, context }) => {
+    await assertStaff(context.userId);
+    if (data.userId === context.userId) throw new Error("You cannot delete your own account");
+
+    const pool = (await import("@/lib/mysql/db.server")).default;
+    const [rows] = await pool.query(
+      `SELECT u.email, ur.role FROM users u
+       LEFT JOIN user_roles ur ON ur.user_id = u.id
+       WHERE u.id = :userId`,
+      { userId: data.userId },
+    );
+    const targetRows = rows as { email: string; role: string | null }[];
+    if (targetRows.length === 0) throw new Error("Customer not found");
+    const roles = targetRows.map((r) => r.role).filter(Boolean);
+    if (roles.includes("super_admin") || roles.includes("admin")) {
+      throw new Error("Only plain customer accounts can be deleted here");
+    }
+
+    const email = targetRows[0].email;
+
+    // Record the deletion in the audit log before removing the account
+    // — the email is captured in the details text, since the user row
+    // itself (and any of their own past audit entries) will be gone
+    // right after this due to the ON DELETE CASCADE on user_id/actor_id.
+    await pool.execute(
+      `INSERT INTO audit_log (id, actor_id, action, target_type, target_id, details)
+       VALUES (:id, :actorId, :action, :targetType, :targetId, :details)`,
+      {
+        id: crypto.randomUUID(),
+        actorId: context.userId,
+        action: "customer_deleted",
+        targetType: "user",
+        targetId: data.userId,
+        details: `Deleted account: ${email}`,
+      },
+    );
+
+    await pool.execute("DELETE FROM users WHERE id = :userId", { userId: data.userId });
+    return { ok: true };
+  });
+
 export const setUserRole = createServerFn({ method: "POST" })
   .middleware([requireMysqlAuth])
   .inputValidator((input: { userId: string; role: AppRole }) => {

@@ -192,7 +192,10 @@ function BulkRent() {
                   {submitting ? "Submitting…" : "Submit Bulk Request"}
                 </Button>
                 <Button asChild variant="outline">
-                  <Link to="/fleet" search={{ pickup: undefined, date: undefined }}>
+                  <Link
+                    to="/fleet"
+                    search={{ pickup: undefined, date: undefined, days: undefined }}
+                  >
                     Browse Fleet
                   </Link>
                 </Button>

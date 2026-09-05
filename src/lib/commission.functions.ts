@@ -7,6 +7,15 @@ async function getPool() {
   return (await import("@/lib/mysql/db.server")).default;
 }
 
+// Public — no auth required. Only exposes the bare rate number, nothing
+// else, so it's safe to show on signup/login pages before login. Used
+// for the commission disclaimer applicants see before they apply.
+export const getPublicCommissionRate = createServerFn({ method: "GET" }).handler(async () => {
+  const pool = await getPool();
+  const [rows] = await pool.query("SELECT commission_rate FROM platform_settings WHERE id = 1");
+  return { rate: Number((rows as { commission_rate: number }[])[0]?.commission_rate ?? 15) };
+});
+
 export const getCommissionRate = createServerFn({ method: "GET" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {

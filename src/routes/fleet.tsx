@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
 import { Card } from "@/components/ui/card";
@@ -9,18 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ShieldCheck, Star, Loader2 } from "lucide-react";
 import { listAvailableBikes } from "@/lib/bikes.functions";
-import { createBooking } from "@/lib/bookings.functions";
-import { me } from "@/lib/auth.functions";
 import bike1 from "@/assets/bike-1.jpg";
 import bike2 from "@/assets/bike-2.jpg";
 import bike3 from "@/assets/bike-3.jpg";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/fleet")({
   component: Fleet,
   validateSearch: (search: Record<string, unknown>) => ({
     pickup: typeof search.pickup === "string" ? search.pickup : undefined,
     date: typeof search.date === "string" ? search.date : undefined,
+    days: typeof search.days === "number" ? search.days : undefined,
   }),
   head: () => ({
     meta: [
@@ -43,20 +41,17 @@ type Bike = {
   image_url: string | null;
   description: string | null;
   available: boolean | number;
-  vendor_name?: string | null;
 };
 
 function Fleet() {
   const navigate = useNavigate();
   const search = Route.useSearch();
   const [pickup, setPickup] = useState(search.pickup ?? "Kathmandu");
-  const [days, setDays] = useState(1);
   const [startDate, setStartDate] = useState(search.date ?? new Date().toISOString().slice(0, 16));
+  const [days, setDays] = useState(search.days ?? 1);
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
   const fetchBikes = useServerFn(listAvailableBikes);
-  const fetchMe = useServerFn(me);
-  const book = useServerFn(createBooking);
 
   const { data: bikes, isLoading } = useQuery({
     queryKey: ["bikes"],
@@ -71,36 +66,13 @@ function Fleet() {
     setSelectedType((prev) => (prev === type ? null : type));
   }
 
-  const bookingMutation = useMutation({
-    mutationFn: async (bike: Bike) => {
-      const user = await fetchMe().catch(() => null);
-      if (!user) {
-        navigate({ to: "/auth" });
-        throw new Error("Please sign in to book");
-      }
-      const start = new Date(startDate);
-      if (isNaN(start.getTime()) || start < new Date(Date.now() - 60_000)) {
-        throw new Error("Please choose a valid start date and time.");
-      }
-      const end = new Date(start.getTime() + days * 24 * 3600 * 1000);
-      return book({
-        data: {
-          bike_id: bike.id,
-          start_date: start.toISOString(),
-          end_date: end.toISOString(),
-          pickup_location: pickup,
-        },
-      });
-    },
-    onSuccess: (booking) => {
-      toast.success("Booking created!");
-      navigate({ to: "/checkout/$bookingId", params: { bookingId: booking.id } });
-    },
-    onError: (err) => {
-      if (err instanceof Error && err.message.includes("sign in")) return;
-      toast.error(err instanceof Error ? err.message : "Failed to book");
-    },
-  });
+  function goToBike(bikeId: string) {
+    navigate({
+      to: "/bike/$bikeId",
+      params: { bikeId },
+      search: { date: startDate, days },
+    });
+  }
 
   return (
     <div className="min-h-screen bg-secondary/30">
@@ -116,7 +88,7 @@ function Fleet() {
               onChange={(e) => setPickup(e.target.value)}
               maxLength={100}
             />
-            <label className="text-xs text-muted-foreground">Start date & time</label>
+            <label className="text-xs text-muted-foreground">Pickup date & time</label>
             <Input
               className="mt-1 mb-3"
               type="datetime-local"
@@ -185,7 +157,6 @@ function Fleet() {
               const img = b.image_url?.startsWith("/src/assets/")
                 ? fallbackImgs[i % 3]
                 : b.image_url || fallbackImgs[i % 3];
-              const isPending = bookingMutation.isPending && bookingMutation.variables?.id === b.id;
               return (
                 <Card
                   key={b.id}
@@ -206,13 +177,11 @@ function Fleet() {
                     <Link
                       to="/bike/$bikeId"
                       params={{ bikeId: b.id }}
+                      search={{ date: startDate, days }}
                       className="font-semibold text-sm hover:text-primary"
                     >
                       {b.name}
                     </Link>
-                    {b.vendor_name && (
-                      <p className="text-[11px] text-muted-foreground">by {b.vendor_name}</p>
-                    )}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 mb-3">
                       <Star className="size-3 fill-current text-primary" /> 4.8 ·{" "}
                       {b.description?.slice(0, 40) ?? "Premium bike"}
@@ -226,17 +195,20 @@ function Fleet() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Button asChild size="sm" variant="outline">
-                          <Link to="/bike/$bikeId" params={{ bikeId: b.id }}>
+                          <Link
+                            to="/bike/$bikeId"
+                            params={{ bikeId: b.id }}
+                            search={{ date: startDate, days }}
+                          >
                             Details
                           </Link>
                         </Button>
                         <Button
-                          onClick={() => bookingMutation.mutate(b)}
-                          disabled={isPending}
+                          onClick={() => goToBike(b.id)}
                           size="sm"
                           className="bg-primary hover:bg-primary/90"
                         >
-                          {isPending ? "Booking…" : "Book Now"}
+                          Book Now
                         </Button>
                       </div>
                     </div>

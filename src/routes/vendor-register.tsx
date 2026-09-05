@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 import { registerVendor } from "@/lib/vendor.functions";
+import { getPublicCommissionRate } from "@/lib/commission.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/vendor-register")({
@@ -43,6 +44,11 @@ function resizeImageToDataUrl(file: File, maxWidth = 1200, quality = 0.8): Promi
 function VendorRegister() {
   const navigate = useNavigate();
   const register = useServerFn(registerVendor);
+  const fetchRate = useServerFn(getPublicCommissionRate);
+  const { data: rateData } = useQuery({
+    queryKey: ["public-commission-rate"],
+    queryFn: () => fetchRate(),
+  });
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -102,6 +108,18 @@ function VendorRegister() {
         <p className="text-sm text-muted-foreground mb-6">
           List your own bikes for rent. Applications are reviewed before approval.
         </p>
+        <Card className="p-4 mb-6 border-primary/30 bg-primary/5">
+          <div className="flex gap-2">
+            <ShieldAlert className="size-4 text-primary shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Before you apply:</span> RideNepal
+              currently takes a{" "}
+              <span className="font-semibold text-foreground">{rateData?.rate ?? "…"}%</span>{" "}
+              commission on every completed booking made through the platform. This rate is set by
+              RideNepal and may change over time. By applying, you agree to this arrangement.
+            </p>
+          </div>
+        </Card>
         <Card className="p-6 border-0 shadow-sm space-y-4">
           <div>
             <label className="text-xs text-muted-foreground">Full name</label>
@@ -173,8 +191,8 @@ function VendorRegister() {
           </Button>
           <p className="text-xs text-center text-muted-foreground">
             Already registered?{" "}
-            <Link to="/auth" className="text-primary hover:underline">
-              Sign in
+            <Link to="/admin-login" className="text-primary hover:underline">
+              Admin sign in
             </Link>
           </p>
         </Card>

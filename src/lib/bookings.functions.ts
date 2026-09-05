@@ -158,6 +158,25 @@ export const createBooking = createServerFn({ method: "POST" })
       },
     );
 
+    // Save these details to the user's profile so next time they book,
+    // the form is already filled in — no need to re-enter or re-upload.
+    await pool.execute(
+      `UPDATE users SET full_name = :fullName, phone = :phone, address = :address,
+              citizenship_number = :citizenshipNumber,
+              citizenship_front_image = :citizenshipFront,
+              citizenship_back_image = :citizenshipBack
+       WHERE id = :userId`,
+      {
+        fullName: data.renter_full_name,
+        phone: data.renter_phone,
+        address: data.renter_address,
+        citizenshipNumber: data.citizenship_number,
+        citizenshipFront: data.citizenship_front_image,
+        citizenshipBack: data.citizenship_back_image,
+        userId: context.userId,
+      },
+    );
+
     const { notifyStaff } = await import("@/lib/notifications.functions");
     await notifyStaff({
       title: "New booking",

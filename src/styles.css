@@ -69,8 +69,8 @@
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
- --primary: oklch(0.55 0.17 150);
- --primary-foreground: oklch(0.99 0 0);
+  --primary: oklch(0.55 0.17 150);
+  --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.95 0.015 160);
   --secondary-foreground: oklch(0.22 0.06 165);
   --accent: oklch(0.95 0.02 160);
@@ -144,4 +144,27 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+}
+
+@keyframes heart-burst {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+  30% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+.animate-heart-burst {
+  animation: heart-burst 0.7s ease-out;
 }

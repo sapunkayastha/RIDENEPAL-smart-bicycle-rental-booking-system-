@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
+import { requireMysqlAuth, getOptionalUserId } from "@/lib/auth/auth-middleware";
 
 async function getPool() {
   return (await import("@/lib/mysql/db.server")).default;
@@ -52,6 +52,15 @@ export const listGalleryPosts = createServerFn({ method: "GET" })
 
     const likes = likeRows as LikeRow[];
     const comments = commentRows as CommentRow[];
+    const myUserId = await getOptionalUserId();
+
+    const [myLikeRows] = myUserId
+      ? await pool.query(
+          "SELECT post_id FROM gallery_likes WHERE user_id = :userId AND post_id IN (:ids)",
+          { userId: myUserId, ids },
+        )
+      : [[]];
+    const myLikedPostIds = new Set((myLikeRows as LikeRow[]).map((l) => l.post_id));
 
     return postRows.map((p) => ({
       id: p.id,
@@ -62,6 +71,7 @@ export const listGalleryPosts = createServerFn({ method: "GET" })
       place: p.place,
       created_at: p.created_at,
       like_count: likes.filter((l) => l.post_id === p.id).length,
+      liked_by_me: myLikedPostIds.has(p.id),
       comments: comments
         .filter((c) => c.post_id === p.id)
         .map((c) => ({ id: c.id, body: c.body, user_name: c.full_name || "Rider" })),

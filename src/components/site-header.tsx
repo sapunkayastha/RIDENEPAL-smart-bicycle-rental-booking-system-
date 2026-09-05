@@ -56,8 +56,15 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
           <Link to="/" className={linkCls}>
             Explore
           </Link>
-          <Link to="/fleet" search={{ pickup: undefined, date: undefined }} className={linkCls}>
+          <Link
+            to="/fleet"
+            search={{ pickup: undefined, date: undefined, days: undefined }}
+            className={linkCls}
+          >
             Fleet
+          </Link>
+          <Link to="/admin-login" className={linkCls}>
+            Become a Vendor
           </Link>
           <Link to="/bulk-rent" className={linkCls}>
             Bulk Rent

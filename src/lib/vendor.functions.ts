@@ -168,6 +168,42 @@ export const listMyVendorBikes = createServerFn({ method: "GET" })
     return rows;
   });
 
+export const getMyVendorEarnings = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    const pool = await getPool();
+
+    const [totals] = await pool.query(
+      `SELECT
+         COALESCE(SUM(b.vendor_payout), 0) AS total_earned,
+         COUNT(*) AS paid_bookings
+       FROM bookings b
+       JOIN bikes bk ON bk.id = b.bike_id
+       WHERE bk.vendor_id = :userId
+         AND b.status IN ('paid', 'active', 'completed')
+         AND b.vendor_payout IS NOT NULL`,
+      { userId: context.userId },
+    );
+
+    const [rows] = await pool.query(
+      `SELECT b.id, b.total_amount, b.platform_commission, b.vendor_payout, b.status,
+              b.created_at, bk.name AS bike_name
+       FROM bookings b
+       JOIN bikes bk ON bk.id = b.bike_id
+       WHERE bk.vendor_id = :userId
+         AND b.status IN ('paid', 'active', 'completed')
+         AND b.vendor_payout IS NOT NULL
+       ORDER BY b.created_at DESC
+       LIMIT 50`,
+      { userId: context.userId },
+    );
+
+    return {
+      totals: (totals as { total_earned: number; paid_bookings: number }[])[0],
+      bookings: rows,
+    };
+  });
+
 const vendorBikeSchema = z.object({
   name: z.string().trim().min(1).max(190),
   type: z.enum(["electric", "hybrid", "manual"]),
@@ -252,6 +288,13 @@ export const approveVendor = createServerFn({ method: "POST" })
     await assertSuperAdmin(context.userId);
     const pool = await getPool();
 
+    const [profileRows] = await pool.query(
+      "SELECT business_name FROM vendor_profiles WHERE user_id = :userId",
+      { userId: data.userId },
+    );
+    const businessName =
+      (profileRows as { business_name: string }[])[0]?.business_name ?? "This vendor";
+
     await pool.execute(
       `UPDATE vendor_profiles SET status = 'approved', reviewed_by = :reviewer, reviewed_at = NOW()
        WHERE user_id = :userId`,
@@ -277,6 +320,12 @@ export const approveVendor = createServerFn({ method: "POST" })
        WHERE id = 1`,
       { step: COMMISSION_STEP, cap: COMMISSION_CAP },
     );
+    const [newRateRows] = await pool.query(
+      "SELECT commission_rate FROM platform_settings WHERE id = 1",
+    );
+    const newRate = Number(
+      (newRateRows as { commission_rate: number }[])[0]?.commission_rate ?? 15,
+    );
 
     const { notifyUser } = await import("@/lib/notifications.functions");
     await notifyUser({
@@ -284,6 +333,15 @@ export const approveVendor = createServerFn({ method: "POST" })
       title: "Vendor application approved",
       body: "You can now list bikes for rent from your vendor dashboard.",
       link: "/vendor-dashboard",
+    });
+
+    // Confirm to the superadmin that they're now earning commission
+    // from this vendor, and what the rate is now.
+    await notifyUser({
+      userId: context.userId,
+      title: `${businessName} is now linked to RideNepal`,
+      body: `You'll earn commission on their bookings going forward. Your platform commission rate is now ${newRate}%.`,
+      link: "/commissions",
     });
 
     return { ok: true };

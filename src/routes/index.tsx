@@ -37,9 +37,9 @@ export const Route = createFileRoute("/")({
 });
 
 const bikes = [
-  { name: "Himalayan Apex X1", price: "NPR 2,500/day", img: bike1 },
-  { name: "Valley Racer V2", price: "NPR 2,200/day", img: bike2 },
-  { name: "Trailblazer Pro", price: "NPR 3,000/day", img: bike3 },
+  { name: "Himalayan Apex X1", price: "$25/day", img: bike1 },
+  { name: "Valley Racer V2", price: "$22/day", img: bike2 },
+  { name: "Trailblazer Pro", price: "$30/day", img: bike3 },
 ];
 
 const features = [
@@ -195,12 +195,11 @@ function Index() {
                 </button>
               </div>
               <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-background">
-                <Calendar className="size-4 text-muted-foreground shrink-0" />
+                <Calendar className="size-4 text-muted-foreground" />
                 <Input
-                  type="datetime-local"
                   className="border-0 shadow-none focus-visible:ring-0 p-0 h-auto"
+                  placeholder="Date & time"
                   value={date}
-                  min={new Date().toISOString().slice(0, 16)}
                   onChange={(e) => setDate(e.target.value)}
                 />
               </div>
@@ -219,7 +218,7 @@ function Index() {
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Top-Tier Fleet</h2>
             <Link
               to="/fleet"
-              search={{ pickup: undefined, date: undefined }}
+              search={{ pickup: undefined, date: undefined, days: undefined }}
               className="text-sm text-primary hover:underline"
             >
               View all bikes →
@@ -248,7 +247,10 @@ function Index() {
                     <Star className="size-3 fill-current text-primary" /> 4.9 · 120 rides
                   </div>
                   <Button asChild className="w-full bg-primary hover:bg-primary/90">
-                    <Link to="/fleet" search={{ pickup: undefined, date: undefined }}>
+                    <Link
+                      to="/fleet"
+                      search={{ pickup: undefined, date: undefined, days: undefined }}
+                    >
                       Book Now
                     </Link>
                   </Button>
@@ -318,15 +320,18 @@ function Index() {
             Join thousands of riders exploring trails, cities, and mountains with RideNepal.
           </p>
           <div className="mt-8 flex flex-wrap gap-3 justify-center">
-            <Button size="lg" variant="secondary">
-              Book Your First Ride
+            <Button asChild size="lg" variant="secondary">
+              <Link to="/fleet" search={{ pickup: undefined, date: undefined, days: undefined }}>
+                Book Your First Ride
+              </Link>
             </Button>
             <Button
+              asChild
               size="lg"
               variant="outline"
               className="bg-transparent text-primary-foreground border-primary-foreground/40 hover:bg-primary-foreground/10 hover:text-primary-foreground"
             >
-              Become a Partner
+              <Link to="/admin-login">Become a Partner</Link>
             </Button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
@@ -20,6 +20,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { getBike } from "@/lib/bikes.functions";
 import { createBooking } from "@/lib/bookings.functions";
 import { myRole } from "@/lib/auth.functions";
+import { getMyProfile } from "@/lib/profile.functions";
 import { toast } from "sonner";
 import bike1 from "@/assets/bike-1.jpg";
 import bike2 from "@/assets/bike-2.jpg";
@@ -27,6 +28,10 @@ import bike3 from "@/assets/bike-3.jpg";
 
 export const Route = createFileRoute("/bike/$bikeId")({
   component: BikeDetail,
+  validateSearch: (search: Record<string, unknown>) => ({
+    date: typeof search.date === "string" ? search.date : undefined,
+    days: typeof search.days === "number" ? search.days : undefined,
+  }),
   head: () => ({ meta: [{ title: "Bike Details — RIDENEPAL" }] }),
 });
 
@@ -143,12 +148,13 @@ function ImageUploadField({
 
 function BikeDetail() {
   const { bikeId } = Route.useParams();
+  const search = Route.useSearch();
   const navigate = useNavigate();
   const { user } = useAuth();
   const [pickupId, setPickupId] = useState<string>(PICKUP_LOCATIONS[0].id);
   const pickupLocation = PICKUP_LOCATIONS.find((l) => l.id === pickupId) ?? PICKUP_LOCATIONS[0];
-  const [days, setDays] = useState(1);
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 16));
+  const [days, setDays] = useState(search.days ?? 1);
+  const [startDate, setStartDate] = useState(search.date ?? new Date().toISOString().slice(0, 16));
 
   const [showAgreement, setShowAgreement] = useState(false);
   const [agreement, setAgreement] = useState({
@@ -169,6 +175,34 @@ function BikeDetail() {
     throwOnError: false,
   });
   const isStaff = roleData?.isStaff ?? false;
+
+  const fetchMyProfile = useServerFn(getMyProfile);
+  const { data: profile } = useQuery({
+    queryKey: ["my-profile-for-booking"],
+    queryFn: () => fetchMyProfile(),
+    enabled: !!user,
+    retry: false,
+    throwOnError: false,
+  });
+
+  // Pre-fill the rental agreement from whatever the customer saved on
+  // a previous booking — they shouldn't have to re-type or re-upload
+  // the same details every time.
+  useEffect(() => {
+    if (!profile) return;
+    setAgreement((a) => ({
+      fullName: a.fullName || profile.full_name || "",
+      address: a.address || profile.address || "",
+      phone: a.phone || profile.phone || "",
+      citizenshipNumber: a.citizenshipNumber || profile.citizenship_number || "",
+    }));
+    if (profile.citizenship_front_image) {
+      setFrontImage((v) => v ?? profile.citizenship_front_image);
+    }
+    if (profile.citizenship_back_image) {
+      setBackImage((v) => v ?? profile.citizenship_back_image);
+    }
+  }, [profile]);
 
   const fetchBike = useServerFn(getBike);
   const { data: bike, isLoading } = useQuery({
@@ -249,7 +283,7 @@ function BikeDetail() {
           <h1 className="text-2xl font-bold mb-2">Bike not found</h1>
           <p className="text-muted-foreground mb-6">This bike may no longer be available.</p>
           <Button asChild className="bg-primary hover:bg-primary/90">
-            <Link to="/fleet" search={{ pickup: undefined, date: undefined }}>
+            <Link to="/fleet" search={{ pickup: undefined, date: undefined, days: undefined }}>
               Browse the fleet
             </Link>
           </Button>
@@ -279,7 +313,7 @@ function BikeDetail() {
         <div>
           <Link
             to="/fleet"
-            search={{ pickup: undefined, date: undefined }}
+            search={{ pickup: undefined, date: undefined, days: undefined }}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
           >
             <ArrowLeft className="size-3.5" /> Back to fleet

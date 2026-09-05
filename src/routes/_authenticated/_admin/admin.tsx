@@ -17,6 +17,7 @@ import {
   listCancelledBookings,
   refundBooking,
   listAuditLog,
+  deleteCustomer,
 } from "@/lib/admin.functions";
 import { cancelBooking } from "@/lib/bookings.functions";
 import { roleLabel, type AppRole } from "@/lib/roles";
@@ -30,8 +31,13 @@ import {
   Bike,
   RotateCcw,
   History,
+  ChevronDown,
+  Store,
+  Percent,
+  Radio,
+  MessageSquare,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 10;
@@ -52,6 +58,16 @@ function AdminDashboard() {
   const fetchMyRole = useServerFn(myRole);
   const qc = useQueryClient();
   const [q, setQ] = useState("");
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (toolsRef.current && !toolsRef.current.contains(e.target as Node)) setToolsOpen(false);
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
 
   const { data: viewer } = useQuery({
     queryKey: ["my-role"],
@@ -71,6 +87,16 @@ function AdminDashboard() {
       qc.invalidateQueries({ queryKey: ["admin-customers"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update role"),
+  });
+
+  const removeCustomer = useServerFn(deleteCustomer);
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => removeCustomer({ data: { userId } }),
+    onSuccess: () => {
+      toast.success("Customer account deleted");
+      qc.invalidateQueries({ queryKey: ["admin-customers"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete customer"),
   });
 
   const fetchPendingBookings = useServerFn(listPendingBookings);
@@ -177,65 +203,96 @@ function AdminDashboard() {
     <div className="min-h-screen bg-secondary/20">
       <SiteHeader />
       <main className="max-w-7xl mx-auto px-6 py-10">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-1">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="size-5 text-primary" />
-            <h1 className="text-3xl font-bold">
+            <ShieldCheck className="size-5 text-primary shrink-0" />
+            <h1 className="text-2xl sm:text-3xl font-bold">
               {isSuperAdmin ? "Super Admin Console" : "Admin Console"}
             </h1>
           </div>
-          <div className="flex items-center gap-4">
-            {isSuperAdmin && (
-              <>
-                <Link to="/vendors" className="text-sm font-medium text-primary hover:underline">
-                  Vendor Applications →
+          <div className="relative" ref={toolsRef}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setToolsOpen((o) => !o)}
+            >
+              Admin Tools
+              <ChevronDown className="size-3.5 opacity-60" />
+            </Button>
+            {toolsOpen && (
+              <div className="absolute right-0 mt-2 w-56 rounded-lg border bg-background shadow-lg z-50 py-1">
+                {isSuperAdmin && (
+                  <>
+                    <Link
+                      to="/vendors"
+                      onClick={() => setToolsOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary/50"
+                    >
+                      <Store className="size-4 text-muted-foreground" /> Vendor Applications
+                    </Link>
+                    <Link
+                      to="/commissions"
+                      onClick={() => setToolsOpen(false)}
+                      className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary/50"
+                    >
+                      <Percent className="size-4 text-muted-foreground" /> Commissions
+                    </Link>
+                    <div className="border-t my-1" />
+                  </>
+                )}
+                <Link
+                  to="/tracking"
+                  onClick={() => setToolsOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary/50"
+                >
+                  <Radio className="size-4 text-muted-foreground" /> Live Tracking
                 </Link>
                 <Link
-                  to="/commissions"
-                  className="text-sm font-medium text-primary hover:underline"
+                  to="/manage-bikes"
+                  onClick={() => setToolsOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary/50"
                 >
-                  Commissions →
+                  <Bike className="size-4 text-muted-foreground" /> Manage Bikes
                 </Link>
-              </>
+                <Link
+                  to="/messages"
+                  onClick={() => setToolsOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary/50"
+                >
+                  <MessageSquare className="size-4 text-muted-foreground" /> Support Inbox
+                </Link>
+              </div>
             )}
-            <Link to="/tracking" className="text-sm font-medium text-primary hover:underline">
-              Live Tracking →
-            </Link>
-            <Link to="/manage-bikes" className="text-sm font-medium text-primary hover:underline">
-              Manage Bikes →
-            </Link>
-            <Link to="/messages" className="text-sm font-medium text-primary hover:underline">
-              Support Inbox →
-            </Link>
           </div>
         </div>
-        <p className="text-muted-foreground mb-8">
+        <p className="text-sm text-muted-foreground mb-8">
           {isSuperAdmin
             ? "Manage customers, staff roles, and account verification status."
             : "Manage customers and account verification status. Role changes are restricted to Super Admins."}
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <Card className="p-5 border-0 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
+          <Card className="p-4 sm:p-5 border-0 shadow-sm">
             <div className="flex items-center gap-2 text-muted-foreground text-xs font-semibold">
               <Users className="size-4" /> TOTAL ACCOUNTS
             </div>
-            <div className="text-3xl font-bold mt-2">{data?.length ?? 0}</div>
+            <div className="text-2xl sm:text-3xl font-bold mt-2">{data?.length ?? 0}</div>
           </Card>
-          <Card className="p-5 border-0 shadow-sm">
+          <Card className="p-4 sm:p-5 border-0 shadow-sm">
             <div className="text-xs font-semibold text-muted-foreground">VERIFIED (OTP)</div>
-            <div className="text-3xl font-bold mt-2 text-primary">{verifiedCount}</div>
+            <div className="text-2xl sm:text-3xl font-bold mt-2 text-primary">{verifiedCount}</div>
           </Card>
-          <Card className="p-5 border-0 shadow-sm">
+          <Card className="p-4 sm:p-5 border-0 shadow-sm">
             <div className="text-xs font-semibold text-muted-foreground">
               STAFF (ADMIN + SUPER ADMIN)
             </div>
-            <div className="text-3xl font-bold mt-2">{staffCount}</div>
+            <div className="text-2xl sm:text-3xl font-bold mt-2">{staffCount}</div>
           </Card>
         </div>
 
         {pendingBookings && pendingBookings.length > 0 && (
-          <Card className="p-5 border-0 shadow-sm mb-8">
+          <Card className="p-4 sm:p-5 border-0 shadow-sm mb-8">
             <h2 className="font-semibold flex items-center gap-2 mb-4">
               <Clock className="size-4 text-primary" /> Pending Verification (
               {pendingBookings.length})
@@ -269,7 +326,7 @@ function AdminDashboard() {
           </Card>
         )}
 
-        <div className="mb-4 max-w-sm">
+        <div className="mb-4 w-full sm:max-w-sm">
           <Input
             placeholder="Search by email, name or phone…"
             value={q}
@@ -285,103 +342,245 @@ function AdminDashboard() {
             <Loader2 className="size-4 animate-spin" /> Loading customers…
           </p>
         ) : (
-          <Card className="border-0 shadow-sm overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3">Customer</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Bookings</th>
-                  <th className="px-4 py-3">Spend</th>
-                  <th className="px-4 py-3">Last sign-in</th>
-                  {isSuperAdmin && <th className="px-4 py-3 text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => {
-                  const role: AppRole = c.roles.includes("super_admin")
-                    ? "super_admin"
-                    : c.roles.includes("admin")
-                      ? "admin"
-                      : "customer";
-                  const isSelf = viewer && c.id === viewer.userId;
-                  return (
-                    <tr key={c.id} className="border-t">
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{c.fullName ?? "—"}</div>
-                        <div className="text-xs text-muted-foreground">
+          <>
+            {/* Mobile: card list */}
+            <div className="md:hidden space-y-3">
+              {rows.map((c) => {
+                const role: AppRole = c.roles.includes("super_admin")
+                  ? "super_admin"
+                  : c.roles.includes("admin")
+                    ? "admin"
+                    : "customer";
+                const isSelf = viewer && c.id === viewer.userId;
+                return (
+                  <Card key={c.id} className="p-4 border-0 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{c.fullName ?? "—"}</div>
+                        <div className="text-xs text-muted-foreground truncate">
                           {c.email ?? c.id.slice(0, 8)}
                         </div>
                         {c.phone && <div className="text-xs text-muted-foreground">{c.phone}</div>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 text-xs">
-                          {c.otpVerified ? (
-                            <CheckCircle2 className="size-3.5 text-primary" />
-                          ) : (
-                            <XCircle className="size-3.5 text-muted-foreground" />
-                          )}
-                          {c.otpVerified ? "Verified" : "Unverified"}
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${role !== "customer" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}
+                      >
+                        {roleLabel(role).toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-xs mt-3">
+                      {c.otpVerified ? (
+                        <CheckCircle2 className="size-3.5 text-primary" />
+                      ) : (
+                        <XCircle className="size-3.5 text-muted-foreground" />
+                      )}
+                      {c.otpVerified ? "Verified" : "Unverified"} ·{" "}
+                      {c.emailConfirmed ? "Email confirmed" : "Email pending"}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+                      <div>
+                        <div className="text-muted-foreground">Bookings</div>
+                        <div className="font-medium">{c.bookingCount}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Spend</div>
+                        <div className="font-medium">NPR {c.totalSpend.toFixed(0)}</div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Last sign-in</div>
+                        <div className="font-medium">
+                          {c.lastSignInAt ? new Date(c.lastSignInAt).toLocaleDateString() : "—"}
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {c.emailConfirmed ? "Email confirmed" : "Email pending"}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`text-[10px] font-semibold px-2 py-1 rounded-full ${role !== "customer" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t">
+                      <Button asChild size="sm" variant="outline">
+                        <Link to="/customer/$userId" params={{ userId: c.id }}>
+                          View
+                        </Link>
+                      </Button>
+                      {role === "customer" && !isSelf && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:text-destructive"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Permanently delete ${c.email}? This removes their account and ALL their bookings. This cannot be undone.`,
+                              )
+                            ) {
+                              deleteMutation.mutate(c.id);
+                            }
+                          }}
                         >
-                          {roleLabel(role).toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">{c.bookingCount}</td>
-                      <td className="px-4 py-3">NPR {c.totalSpend.toFixed(0)}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {c.lastSignInAt ? new Date(c.lastSignInAt).toLocaleDateString() : "—"}
-                      </td>
-                      {isSuperAdmin && (
-                        <td className="px-4 py-3 text-right">
-                          {isSelf ? (
-                            <span className="text-xs text-muted-foreground">This is you</span>
-                          ) : role === "super_admin" ? (
-                            <span className="text-xs text-muted-foreground">Locked</span>
-                          ) : role === "admin" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={roleMutation.isPending}
-                              onClick={() =>
-                                roleMutation.mutate({ userId: c.id, role: "customer" })
+                          Delete
+                        </Button>
+                      )}
+                      {isSuperAdmin &&
+                        !isSelf &&
+                        (role === "super_admin" ? (
+                          <span className="text-xs text-muted-foreground">Role locked</span>
+                        ) : role === "admin" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={roleMutation.isPending}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Revoke admin access for ${c.email}? They will become a regular customer.`,
+                                )
+                              ) {
+                                roleMutation.mutate({ userId: c.id, role: "customer" });
                               }
-                            >
-                              Revoke Admin Access
-                            </Button>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Customer</span>
+                            }}
+                          >
+                            Revoke Admin
+                          </Button>
+                        ) : null)}
+                    </div>
+                  </Card>
+                );
+              })}
+              {rows.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-8">No accounts found.</p>
+              )}
+            </div>
+
+            {/* Desktop: table */}
+            <Card className="hidden md:block border-0 shadow-sm overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3">Customer</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Bookings</th>
+                    <th className="px-4 py-3">Spend</th>
+                    <th className="px-4 py-3">Last sign-in</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((c) => {
+                    const role: AppRole = c.roles.includes("super_admin")
+                      ? "super_admin"
+                      : c.roles.includes("admin")
+                        ? "admin"
+                        : "customer";
+                    const isSelf = viewer && c.id === viewer.userId;
+                    return (
+                      <tr key={c.id} className="border-t hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{c.fullName ?? "—"}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {c.email ?? c.id.slice(0, 8)}
+                          </div>
+                          {c.phone && (
+                            <div className="text-xs text-muted-foreground">{c.phone}</div>
                           )}
                         </td>
-                      )}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 text-xs">
+                            {c.otpVerified ? (
+                              <CheckCircle2 className="size-3.5 text-primary" />
+                            ) : (
+                              <XCircle className="size-3.5 text-muted-foreground" />
+                            )}
+                            {c.otpVerified ? "Verified" : "Unverified"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {c.emailConfirmed ? "Email confirmed" : "Email pending"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-1 rounded-full ${role !== "customer" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}
+                          >
+                            {roleLabel(role).toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">{c.bookingCount}</td>
+                        <td className="px-4 py-3">NPR {c.totalSpend.toFixed(0)}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {c.lastSignInAt ? new Date(c.lastSignInAt).toLocaleDateString() : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button asChild size="sm" variant="outline">
+                              <Link to="/customer/$userId" params={{ userId: c.id }}>
+                                View
+                              </Link>
+                            </Button>
+                            {role === "customer" && !isSelf && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive hover:text-destructive"
+                                disabled={deleteMutation.isPending}
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `Permanently delete ${c.email}? This removes their account and ALL their bookings. This cannot be undone.`,
+                                    )
+                                  ) {
+                                    deleteMutation.mutate(c.id);
+                                  }
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            )}
+                            {isSuperAdmin &&
+                              (isSelf ? (
+                                <span className="text-xs text-muted-foreground">This is you</span>
+                              ) : role === "super_admin" ? (
+                                <span className="text-xs text-muted-foreground">Locked</span>
+                              ) : role === "admin" ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={roleMutation.isPending}
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Revoke admin access for ${c.email}? They will become a regular customer.`,
+                                      )
+                                    ) {
+                                      roleMutation.mutate({ userId: c.id, role: "customer" });
+                                    }
+                                  }}
+                                >
+                                  Revoke Admin
+                                </Button>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Customer</span>
+                              ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                        No accounts found.
+                      </td>
                     </tr>
-                  );
-                })}
-                {rows.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={isSuperAdmin ? 7 : 6}
-                      className="px-4 py-8 text-center text-muted-foreground"
-                    >
-                      No accounts found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </Card>
+                  )}
+                </tbody>
+              </table>
+            </Card>
+          </>
         )}
 
         {filteredRows.length > PAGE_SIZE && (
-          <div className="flex items-center justify-between mt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-4">
             <p className="text-xs text-muted-foreground">
               Page {currentPage} of {totalPages} · {filteredRows.length} accounts
             </p>
@@ -407,7 +606,7 @@ function AdminDashboard() {
         )}
 
         {activeBookings && activeBookings.length > 0 && (
-          <Card className="p-5 border-0 shadow-sm mt-8">
+          <Card className="p-4 sm:p-5 border-0 shadow-sm mt-8">
             <h2 className="font-semibold flex items-center gap-2 mb-4">
               <Bike className="size-4 text-primary" /> Active Rides ({activeBookings.length})
             </h2>
@@ -471,7 +670,7 @@ function AdminDashboard() {
         )}
 
         {cancelledBookings && cancelledBookings.length > 0 && (
-          <Card className="p-5 border-0 shadow-sm mt-8">
+          <Card className="p-4 sm:p-5 border-0 shadow-sm mt-8">
             <h2 className="font-semibold flex items-center gap-2 mb-4">
               <RotateCcw className="size-4 text-primary" /> Cancelled — Awaiting Refund (
               {cancelledBookings.length})
@@ -496,7 +695,14 @@ function AdminDashboard() {
                     variant="outline"
                     disabled={refundMutation.isPending}
                     onClick={() => {
-                      const notes = window.prompt("Optional refund note:") ?? undefined;
+                      const notes = window.prompt("Optional refund note:");
+                      if (notes === null) return; // user clicked Cancel — abort entirely
+                      if (
+                        !window.confirm(
+                          `Confirm refund of NPR ${Number(b.totalAmount).toFixed(0)}?`,
+                        )
+                      )
+                        return;
                       refundMutation.mutate({ bookingId: b.id, notes: notes || undefined });
                     }}
                   >
@@ -509,7 +715,7 @@ function AdminDashboard() {
         )}
 
         {auditLog && auditLog.length > 0 && (
-          <Card className="p-5 border-0 shadow-sm mt-8">
+          <Card className="p-4 sm:p-5 border-0 shadow-sm mt-8">
             <h2 className="font-semibold flex items-center gap-2 mb-4">
               <History className="size-4 text-primary" /> Recent Activity
             </h2>

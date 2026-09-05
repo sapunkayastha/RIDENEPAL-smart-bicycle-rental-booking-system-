@@ -114,7 +114,7 @@ function Dashboard() {
                 No bookings yet. Pick a bike to start your first ride.
               </p>
               <Button asChild className="bg-primary hover:bg-primary/90">
-                <Link to="/fleet" search={{ pickup: undefined, date: undefined }}>
+                <Link to="/fleet" search={{ pickup: undefined, date: undefined, days: undefined }}>
                   Browse Fleet
                 </Link>
               </Button>

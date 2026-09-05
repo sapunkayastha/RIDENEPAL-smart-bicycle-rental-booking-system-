@@ -146,7 +146,7 @@ function Gallery() {
 
         <div className="text-center mt-10">
           <Button asChild variant="outline">
-            <Link to="/fleet" search={{ pickup: undefined, date: undefined }}>
+            <Link to="/fleet" search={{ pickup: undefined, date: undefined, days: undefined }}>
               Book your next ride
             </Link>
           </Button>
@@ -161,6 +161,9 @@ function PostCard({ post }: { post: Post }) {
   const addComment = useServerFn(addGalleryComment);
   const qc = useQueryClient();
   const [text, setText] = useState("");
+  const [showComments, setShowComments] = useState(false);
+  const [burst, setBurst] = useState(false);
+  const commentInputRef = useRef<HTMLInputElement>(null);
 
   const likeMutation = useMutation({
     mutationFn: () => toggleLike({ data: { post_id: post.id } }),
@@ -177,6 +180,37 @@ function PostCard({ post }: { post: Post }) {
     onError: () => toast.error("Sign in to comment"),
   });
 
+  function handleLikeClick() {
+    if (!post.liked_by_me) {
+      setBurst(true);
+      setTimeout(() => setBurst(false), 700);
+    }
+    likeMutation.mutate();
+  }
+
+  function handleCommentClick() {
+    setShowComments((v) => !v);
+    setTimeout(() => commentInputRef.current?.focus(), 50);
+  }
+
+  async function handleShare() {
+    const shareUrl = `${window.location.origin}/gallery`;
+    const shareText = post.caption
+      ? `${post.user_name} on RIDENEPAL: ${post.caption}`
+      : `Check out ${post.user_name}'s ride on RIDENEPAL`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "RIDENEPAL", text: shareText, url: shareUrl });
+      } catch {
+        // user cancelled the share sheet — not an error
+      }
+    } else {
+      await navigator.clipboard.writeText(`${shareText} — ${shareUrl}`);
+      toast.success("Link copied to clipboard!");
+    }
+  }
+
   return (
     <Card className="overflow-hidden border-0 shadow-sm">
       <div className="p-4 flex items-center gap-3">
@@ -192,22 +226,35 @@ function PostCard({ post }: { post: Post }) {
           )}
         </div>
       </div>
-      <div className="aspect-square bg-muted">
+      <div
+        className="aspect-square bg-muted relative overflow-hidden select-none"
+        onDoubleClick={handleLikeClick}
+      >
         <img src={post.image_url} alt={post.caption ?? ""} className="w-full h-full object-cover" />
+        {burst && (
+          <Heart className="absolute inset-0 m-auto size-24 text-white fill-white drop-shadow-lg pointer-events-none animate-heart-burst" />
+        )}
       </div>
       <div className="p-4">
         <div className="flex items-center gap-5 mb-3 text-sm">
           <button
-            onClick={() => likeMutation.mutate()}
-            className="flex items-center gap-1.5 text-muted-foreground hover:text-primary"
+            onClick={handleLikeClick}
+            className={`flex items-center gap-1.5 transition-colors ${post.liked_by_me ? "text-red-500" : "text-muted-foreground hover:text-primary"}`}
           >
-            <Heart className="size-5" /> {post.like_count}
+            <Heart
+              className={`size-5 transition-transform active:scale-125 ${post.liked_by_me ? "fill-current" : ""}`}
+            />
+            {post.like_count}
           </button>
-          <span className="flex items-center gap-1.5 text-muted-foreground">
+          <button
+            onClick={handleCommentClick}
+            className={`flex items-center gap-1.5 transition-colors ${showComments ? "text-primary" : "text-muted-foreground hover:text-primary"}`}
+          >
             <MessageCircle className="size-5" /> {post.comments.length}
-          </span>
+          </button>
           <button
             aria-label="Share post"
+            onClick={handleShare}
             className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground ml-auto"
           >
             <Share2 className="size-4" />
@@ -218,26 +265,31 @@ function PostCard({ post }: { post: Post }) {
             <span className="font-semibold">{post.user_name}</span> {post.caption}
           </p>
         )}
-        {post.comments.length > 0 && (
-          <div className="mt-3 space-y-1 text-sm">
-            {post.comments.map((c) => (
-              <div key={c.id}>
-                <span className="font-semibold">{c.user_name}</span>{" "}
-                <span className="text-muted-foreground">{c.body}</span>
+        {showComments && (
+          <>
+            {post.comments.length > 0 && (
+              <div className="mt-3 space-y-1 text-sm">
+                {post.comments.map((c) => (
+                  <div key={c.id}>
+                    <span className="font-semibold">{c.user_name}</span>{" "}
+                    <span className="text-muted-foreground">{c.body}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            )}
+            <div className="flex gap-2 mt-3">
+              <Input
+                ref={commentInputRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && text.trim()) commentMutation.mutate(text.trim());
+                }}
+                placeholder="Add a comment..."
+              />
+            </div>
+          </>
         )}
-        <div className="flex gap-2 mt-3">
-          <Input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && text.trim()) commentMutation.mutate(text.trim());
-            }}
-            placeholder="Add a comment..."
-          />
-        </div>
       </div>
     </Card>
   );

@@ -23,6 +23,7 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as BulkRentRouteImport } from './routes/bulk-rent'
 import { Route as AuthCallbackRouteImport } from './routes/auth-callback'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AdminLoginRouteImport } from './routes/admin-login'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BikeBikeIdRouteImport } from './routes/bike.$bikeId'
@@ -41,6 +42,7 @@ import { Route as AuthenticatedAdminMessagesRouteImport } from './routes/_authen
 import { Route as AuthenticatedAdminManageBikesRouteImport } from './routes/_authenticated/_admin/manage-bikes'
 import { Route as AuthenticatedAdminCommissionsRouteImport } from './routes/_authenticated/_admin/commissions'
 import { Route as AuthenticatedAdminAdminRouteImport } from './routes/_authenticated/_admin/admin'
+import { Route as AuthenticatedAdminCustomerUserIdRouteImport } from './routes/_authenticated/_admin/customer.$userId'
 
 const VerifyOtpRoute = VerifyOtpRouteImport.update({
   id: '/verify-otp',
@@ -110,6 +112,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin-login',
+  path: '/admin-login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -209,9 +216,16 @@ const AuthenticatedAdminAdminRoute = AuthenticatedAdminAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedAdminRouteRoute,
 } as any)
+const AuthenticatedAdminCustomerUserIdRoute =
+  AuthenticatedAdminCustomerUserIdRouteImport.update({
+    id: '/customer/$userId',
+    path: '/customer/$userId',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin-login': typeof AdminLoginRoute
   '/auth': typeof AuthRoute
   '/auth-callback': typeof AuthCallbackRoute
   '/bulk-rent': typeof BulkRentRoute
@@ -241,9 +255,11 @@ export interface FileRoutesByFullPath {
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
+  '/customer/$userId': typeof AuthenticatedAdminCustomerUserIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin-login': typeof AdminLoginRoute
   '/auth': typeof AuthRoute
   '/auth-callback': typeof AuthCallbackRoute
   '/bulk-rent': typeof BulkRentRoute
@@ -273,11 +289,13 @@ export interface FileRoutesByTo {
   '/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
+  '/customer/$userId': typeof AuthenticatedAdminCustomerUserIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/admin-login': typeof AdminLoginRoute
   '/auth': typeof AuthRoute
   '/auth-callback': typeof AuthCallbackRoute
   '/bulk-rent': typeof BulkRentRoute
@@ -308,11 +326,13 @@ export interface FileRoutesById {
   '/_authenticated/checkout/$bookingId': typeof AuthenticatedCheckoutBookingIdRoute
   '/_authenticated/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/_authenticated/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
+  '/_authenticated/_admin/customer/$userId': typeof AuthenticatedAdminCustomerUserIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin-login'
     | '/auth'
     | '/auth-callback'
     | '/bulk-rent'
@@ -342,9 +362,11 @@ export interface FileRouteTypes {
     | '/checkout/$bookingId'
     | '/extend/$bookingId'
     | '/track/$bookingId'
+    | '/customer/$userId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin-login'
     | '/auth'
     | '/auth-callback'
     | '/bulk-rent'
@@ -374,10 +396,12 @@ export interface FileRouteTypes {
     | '/checkout/$bookingId'
     | '/extend/$bookingId'
     | '/track/$bookingId'
+    | '/customer/$userId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/admin-login'
     | '/auth'
     | '/auth-callback'
     | '/bulk-rent'
@@ -408,11 +432,13 @@ export interface FileRouteTypes {
     | '/_authenticated/checkout/$bookingId'
     | '/_authenticated/extend/$bookingId'
     | '/_authenticated/track/$bookingId'
+    | '/_authenticated/_admin/customer/$userId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AdminLoginRoute: typeof AdminLoginRoute
   AuthRoute: typeof AuthRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   BulkRentRoute: typeof BulkRentRoute
@@ -530,6 +556,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-login': {
+      id: '/admin-login'
+      path: '/admin-login'
+      fullPath: '/admin-login'
+      preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -658,6 +691,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/_admin/customer/$userId': {
+      id: '/_authenticated/_admin/customer/$userId'
+      path: '/customer/$userId'
+      fullPath: '/customer/$userId'
+      preLoaderRoute: typeof AuthenticatedAdminCustomerUserIdRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
   }
 }
 
@@ -668,6 +708,7 @@ interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminMessagesRoute: typeof AuthenticatedAdminMessagesRoute
   AuthenticatedAdminTrackingRoute: typeof AuthenticatedAdminTrackingRoute
   AuthenticatedAdminVendorsRoute: typeof AuthenticatedAdminVendorsRoute
+  AuthenticatedAdminCustomerUserIdRoute: typeof AuthenticatedAdminCustomerUserIdRoute
 }
 
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
@@ -678,6 +719,8 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminMessagesRoute: AuthenticatedAdminMessagesRoute,
     AuthenticatedAdminTrackingRoute: AuthenticatedAdminTrackingRoute,
     AuthenticatedAdminVendorsRoute: AuthenticatedAdminVendorsRoute,
+    AuthenticatedAdminCustomerUserIdRoute:
+      AuthenticatedAdminCustomerUserIdRoute,
   }
 
 const AuthenticatedAdminRouteRouteWithChildren =
@@ -711,6 +754,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AdminLoginRoute: AdminLoginRoute,
   AuthRoute: AuthRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   BulkRentRoute: BulkRentRoute,
