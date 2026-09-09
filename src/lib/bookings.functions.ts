@@ -2,8 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
 import { getMyRoleFlags } from "@/lib/auth/role-check";
+import {
+  calculateBookingDays,
+  calculateBookingTotal,
+  calculateExtendedWindow,
+} from "@/lib/pricing";
 
-type BikeRow = { id: string; price_per_day: number; available: number };
+type BikeRow = { id: string; price_per_day: number; available: number; quantity: number };
 
 type BookingRow = {
   id: string;
@@ -41,9 +46,7 @@ async function autoExtendOverdueBookings(userId: string) {
   for (const b of overdue) {
     const oldStart = new Date(b.start_date);
     const oldEnd = new Date(b.end_date);
-    const durationMs = oldEnd.getTime() - oldStart.getTime();
-    const newStart = new Date();
-    const newEnd = new Date(newStart.getTime() + durationMs);
+    const { newStart, newEnd } = calculateExtendedWindow(oldStart, oldEnd, new Date());
 
     await pool.execute(
       "UPDATE bookings SET start_date = :start, end_date = :end WHERE id = :id AND status = 'paid'",
@@ -72,6 +75,9 @@ type BookingWithBike = {
   bike_image_url: string | null;
   bike_type: string;
   bike_specs?: string | null;
+  vendor_business_name: string | null;
+  vendor_business_address: string | null;
+  vendor_phone: string | null;
 };
 
 async function getPool() {
@@ -112,7 +118,7 @@ export const createBooking = createServerFn({ method: "POST" })
 
     const pool = await getPool();
     const [rows] = await pool.query(
-      "SELECT id, price_per_day, available FROM bikes WHERE id = :id",
+      "SELECT id, price_per_day, available, quantity FROM bikes WHERE id = :id",
       { id: data.bike_id },
     );
     const bike = (rows as BikeRow[])[0];
@@ -121,13 +127,22 @@ export const createBooking = createServerFn({ method: "POST" })
 
     const start = new Date(data.start_date);
     const end = new Date(data.end_date);
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
-      throw new Error("Invalid rental dates");
-    }
-    const MS_PER_DAY = 24 * 60 * 60 * 1000;
-    const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / MS_PER_DAY));
+    const days = calculateBookingDays(start, end);
     if (days > 30) throw new Error("Rental period cannot exceed 30 days");
-    const total_amount = Number(bike.price_per_day) * days;
+    const total_amount = calculateBookingTotal(Number(bike.price_per_day), days);
+
+    // Atomically claim one unit of stock. The "quantity > 0" guard in
+    // the WHERE clause makes this race-condition safe: if two people
+    // try to book the last unit at the same instant, only one UPDATE
+    // can actually affect a row — the other sees affectedRows === 0
+    // and is correctly told the bike is out of stock.
+    const [stockResult] = await pool.execute(
+      "UPDATE bikes SET quantity = quantity - 1 WHERE id = :id AND quantity > 0",
+      { id: data.bike_id },
+    );
+    if ((stockResult as { affectedRows: number }).affectedRows === 0) {
+      throw new Error("This bike is currently out of stock");
+    }
 
     const bookingId = crypto.randomUUID();
     await pool.execute(
@@ -177,12 +192,31 @@ export const createBooking = createServerFn({ method: "POST" })
       },
     );
 
-    const { notifyStaff } = await import("@/lib/notifications.functions");
-    await notifyStaff({
-      title: "New booking",
-      body: `A new booking was placed for NPR ${total_amount.toFixed(0)}.`,
-      link: "/admin",
+    const [vendorRows] = await pool.query("SELECT vendor_id, name FROM bikes WHERE id = :id", {
+      id: data.bike_id,
     });
+    const bikeInfo = (vendorRows as { vendor_id: string | null; name: string }[])[0];
+    const bikeVendorId = bikeInfo?.vendor_id ?? null;
+
+    if (bikeVendorId) {
+      // This bike belongs to a specific vendor — only they need to
+      // know, and tapping the notification should take them straight
+      // to where they manage it, not the general admin console.
+      const { notifyUser } = await import("@/lib/notifications.functions");
+      await notifyUser({
+        userId: bikeVendorId,
+        title: "New booking for your bike",
+        body: `${bikeInfo?.name ?? "Your bike"} was booked for NPR ${total_amount.toFixed(0)}.`,
+        link: "/vendor-dashboard",
+      });
+    } else {
+      const { notifyStaff } = await import("@/lib/notifications.functions");
+      await notifyStaff({
+        title: "New booking",
+        body: `A new booking was placed for NPR ${total_amount.toFixed(0)}.`,
+        link: "/admin",
+      });
+    }
 
     const [newRows] = await pool.query("SELECT * FROM bookings WHERE id = :id", { id: bookingId });
     return (newRows as BookingRow[])[0];
@@ -213,9 +247,13 @@ export const getBooking = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const pool = await getPool();
     const [rows] = await pool.query(
-      `SELECT b.*, bk.name AS bike_name, bk.image_url AS bike_image_url, bk.type AS bike_type, bk.specs AS bike_specs
+      `SELECT b.*, bk.name AS bike_name, bk.image_url AS bike_image_url, bk.type AS bike_type,
+              bk.specs AS bike_specs, vp.business_name AS vendor_business_name,
+              vp.business_address AS vendor_business_address, u.phone AS vendor_phone
        FROM bookings b
        JOIN bikes bk ON bk.id = b.bike_id
+       LEFT JOIN vendor_profiles vp ON vp.user_id = bk.vendor_id
+       LEFT JOIN users u ON u.id = bk.vendor_id
        WHERE b.id = :id AND b.user_id = :userId`,
       { id: data.id, userId: context.userId },
     );
@@ -229,6 +267,13 @@ export const getBooking = createServerFn({ method: "GET" })
         type: row.bike_type,
         specs: row.bike_specs,
       },
+      vendor: row.vendor_business_name
+        ? {
+            businessName: row.vendor_business_name,
+            businessAddress: row.vendor_business_address,
+            phone: row.vendor_phone,
+          }
+        : null,
     };
   });
 
@@ -240,7 +285,7 @@ export const cancelBooking = createServerFn({ method: "POST" })
     const { isStaff } = await getMyRoleFlags(context.userId);
 
     const [rows] = await pool.query(
-      `SELECT b.id, b.user_id, b.status, b.total_amount, bk.name AS bike_name
+      `SELECT b.id, b.user_id, b.bike_id, b.status, b.total_amount, bk.name AS bike_name
        FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
        WHERE b.id = :id`,
       { id: data.id },
@@ -249,6 +294,7 @@ export const cancelBooking = createServerFn({ method: "POST" })
       rows as {
         id: string;
         user_id: string;
+        bike_id: string;
         status: string;
         total_amount: number;
         bike_name: string;
@@ -266,6 +312,11 @@ export const cancelBooking = createServerFn({ method: "POST" })
       "UPDATE bookings SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = :actorId WHERE id = :id",
       { id: data.id, actorId: context.userId },
     );
+
+    // The unit is no longer reserved — return it to stock.
+    await pool.execute("UPDATE bikes SET quantity = quantity + 1 WHERE id = :id", {
+      id: booking.bike_id,
+    });
 
     const { notifyStaff } = await import("@/lib/notifications.functions");
     await notifyStaff({

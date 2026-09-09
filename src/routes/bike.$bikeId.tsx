@@ -59,6 +59,7 @@ type BikeRow = {
   image_url: string | null;
   description: string | null;
   available: number | boolean;
+  quantity: number;
   specs: Record<string, string | number | null> | null;
   vendor_name?: string | null;
 };
@@ -328,7 +329,15 @@ function BikeDetail() {
                 Currently unavailable
               </span>
             )}
+            {bike.available && bike.quantity <= 0 && (
+              <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-2 py-1 rounded-full">
+                Out of Stock
+              </span>
+            )}
           </div>
+          {bike.available && bike.quantity > 0 && (
+            <p className="text-xs text-muted-foreground mb-2">{bike.quantity} available</p>
+          )}
           {bike.vendor_name && (
             <p className="text-sm text-muted-foreground mb-4">Listed by {bike.vendor_name}</p>
           )}
@@ -452,10 +461,10 @@ function BikeDetail() {
             ) : !showAgreement ? (
               <Button
                 className="w-full bg-primary hover:bg-primary/90"
-                disabled={!bike.available}
+                disabled={!bike.available || bike.quantity <= 0}
                 onClick={() => setShowAgreement(true)}
               >
-                Continue to Rental Details
+                {bike.quantity <= 0 ? "Out of Stock" : "Continue to Rental Details"}
               </Button>
             ) : (
               <div className="space-y-3 border-t pt-4 mt-1">

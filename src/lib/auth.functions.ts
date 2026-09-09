@@ -8,6 +8,7 @@ import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
 import { assignRoleForEmail } from "@/lib/auth/roles";
 import { getGoogleAuthUrl, getGoogleUserFromCode } from "@/lib/auth/google";
 import { getMyRoleFlags } from "@/lib/auth/role-check";
+import { sendOtpEmail } from "@/lib/mailer.server";
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -210,6 +211,7 @@ export const completeGoogleSignIn = createServerFn({ method: "POST" })
         { userId: user.id, code, mins: OTP_TTL_MINUTES },
       );
       console.log(`\n🔐 [DEV OTP] Code for ${email}: ${code}\n`);
+      await sendOtpEmail(email, code, OTP_TTL_MINUTES);
     }
 
     return { ok: true, otpVerified: Boolean(user.otp_verified) };
@@ -244,6 +246,7 @@ export const sendOtp = createServerFn({ method: "POST" })
       { userId: context.userId, code, mins: OTP_TTL_MINUTES },
     );
     console.log(`\n🔐 [DEV OTP] Code for ${user.email}: ${code}\n`);
+    await sendOtpEmail(user.email, code, OTP_TTL_MINUTES);
     return { ok: true };
   });
 export const verifyOtpCode = createServerFn({ method: "POST" })

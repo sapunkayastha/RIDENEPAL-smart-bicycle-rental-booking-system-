@@ -141,7 +141,7 @@ export const getMyVendorProfile = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const pool = await getPool();
     const [rows] = await pool.query(
-      `SELECT business_name, pan_number, vat_number, status, rejection_reason
+      `SELECT business_name, pan_number, vat_number, business_address, status, rejection_reason
        FROM vendor_profiles WHERE user_id = :userId`,
       { userId: context.userId },
     );
@@ -151,6 +151,7 @@ export const getMyVendorProfile = createServerFn({ method: "GET" })
           business_name: string;
           pan_number: string;
           vat_number: string | null;
+          business_address: string | null;
           status: string;
           rejection_reason: string | null;
         }[]
@@ -158,13 +159,78 @@ export const getMyVendorProfile = createServerFn({ method: "GET" })
     );
   });
 
+export const updateMyVendorProfile = createServerFn({ method: "POST" })
+  .middleware([requireMysqlAuth])
+  .inputValidator((input) =>
+    z
+      .object({
+        businessName: z.string().trim().min(1).max(190),
+        panNumber: z.string().trim().min(1).max(50),
+        vatNumber: z.string().trim().max(50).optional(),
+        businessAddress: z.string().trim().max(255).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertApprovedVendor(context.userId);
+    const pool = await getPool();
+    await pool.execute(
+      `UPDATE vendor_profiles
+       SET business_name = :businessName, pan_number = :panNumber,
+           vat_number = :vatNumber, business_address = :businessAddress
+       WHERE user_id = :userId`,
+      {
+        userId: context.userId,
+        businessName: data.businessName,
+        panNumber: data.panNumber,
+        vatNumber: data.vatNumber || null,
+        businessAddress: data.businessAddress || null,
+      },
+    );
+    return { ok: true };
+  });
+
+// Daily earnings breakdown for the vendor's own bookings — the "cash
+// flow" view showing how much came in each day, not just a running
+// total.
+export const getMyVendorDailyCashFlow = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    const pool = await getPool();
+    const [rows] = await pool.query(
+      `SELECT DATE(day) AS day, COUNT(*) AS booking_count, COALESCE(SUM(amount), 0) AS earned
+       FROM (
+         SELECT b.created_at AS day, b.vendor_payout AS amount
+         FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+         WHERE bk.vendor_id = :userId AND b.status IN ('paid', 'active', 'completed')
+           AND b.vendor_payout IS NOT NULL
+         UNION ALL
+         SELECT br.created_at AS day, br.total_amount AS amount
+         FROM bulk_rent_requests br
+         WHERE br.vendor_id = :userId AND br.status = 'paid'
+       ) combined
+       GROUP BY DATE(day)
+       ORDER BY day DESC
+       LIMIT 30`,
+      { userId: context.userId },
+    );
+    return rows as { day: string; booking_count: number; earned: number }[];
+  });
+
 export const listMyVendorBikes = createServerFn({ method: "GET" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
     const pool = await getPool();
-    const [rows] = await pool.query("SELECT * FROM bikes WHERE vendor_id = :userId", {
-      userId: context.userId,
-    });
+    const [rows] = await pool.query(
+      `SELECT bk.*,
+              COALESCE((
+                SELECT COUNT(*) FROM bookings b
+                WHERE b.bike_id = bk.id AND b.status IN ('pending', 'paid', 'active')
+              ), 0) AS currently_rented
+       FROM bikes bk WHERE bk.vendor_id = :userId
+       ORDER BY bk.name ASC`,
+      { userId: context.userId },
+    );
     return rows;
   });
 
@@ -173,27 +239,42 @@ export const getMyVendorEarnings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const pool = await getPool();
 
+    // Combines two revenue sources: individual bookings (through the
+    // normal payment gateway, split by platform commission) and paid
+    // bulk rent requests (arranged directly with the customer, so the
+    // full amount is the vendor's — no platform cut). Both need to
+    // show up together for a vendor to see their real total income.
     const [totals] = await pool.query(
-      `SELECT
-         COALESCE(SUM(b.vendor_payout), 0) AS total_earned,
-         COUNT(*) AS paid_bookings
-       FROM bookings b
-       JOIN bikes bk ON bk.id = b.bike_id
-       WHERE bk.vendor_id = :userId
-         AND b.status IN ('paid', 'active', 'completed')
-         AND b.vendor_payout IS NOT NULL`,
+      `SELECT COALESCE(SUM(amount), 0) AS total_earned, COUNT(*) AS paid_bookings FROM (
+         SELECT b.vendor_payout AS amount
+         FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+         WHERE bk.vendor_id = :userId AND b.status IN ('paid', 'active', 'completed')
+           AND b.vendor_payout IS NOT NULL
+         UNION ALL
+         SELECT br.total_amount AS amount
+         FROM bulk_rent_requests br
+         WHERE br.vendor_id = :userId AND br.status = 'paid'
+       ) combined`,
       { userId: context.userId },
     );
 
     const [rows] = await pool.query(
-      `SELECT b.id, b.total_amount, b.platform_commission, b.vendor_payout, b.status,
-              b.created_at, bk.name AS bike_name
-       FROM bookings b
-       JOIN bikes bk ON bk.id = b.bike_id
-       WHERE bk.vendor_id = :userId
-         AND b.status IN ('paid', 'active', 'completed')
-         AND b.vendor_payout IS NOT NULL
-       ORDER BY b.created_at DESC
+      `SELECT id, total_amount, platform_commission, vendor_payout, status, created_at, bike_name, source
+       FROM (
+         SELECT b.id, b.total_amount, b.platform_commission, b.vendor_payout, b.status,
+                b.created_at, bk.name AS bike_name, 'booking' AS source
+         FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+         WHERE bk.vendor_id = :userId AND b.status IN ('paid', 'active', 'completed')
+           AND b.vendor_payout IS NOT NULL
+         UNION ALL
+         SELECT br.id, br.total_amount, 0 AS platform_commission, br.total_amount AS vendor_payout,
+                br.status, br.created_at,
+                CONCAT(br.organization, ' — bulk (', br.bike_count, ' bikes)') AS bike_name,
+                'bulk' AS source
+         FROM bulk_rent_requests br
+         WHERE br.vendor_id = :userId AND br.status = 'paid'
+       ) combined
+       ORDER BY created_at DESC
        LIMIT 50`,
       { userId: context.userId },
     );
@@ -204,6 +285,35 @@ export const getMyVendorEarnings = createServerFn({ method: "GET" })
     };
   });
 
+// Today / this week / this month / this year — a real at-a-glance
+// dashboard rather than a flat scrollable list.
+export const getMyVendorDashboardSummary = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ context }) => {
+    const pool = await getPool();
+    const [rows] = await pool.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN DATE(day) = CURDATE() THEN amount ELSE 0 END), 0) AS today,
+         COALESCE(SUM(CASE WHEN YEARWEEK(day, 1) = YEARWEEK(CURDATE(), 1) THEN amount ELSE 0 END), 0) AS this_week,
+         COALESCE(SUM(CASE WHEN YEAR(day) = YEAR(CURDATE()) AND MONTH(day) = MONTH(CURDATE()) THEN amount ELSE 0 END), 0) AS this_month,
+         COALESCE(SUM(CASE WHEN YEAR(day) = YEAR(CURDATE()) THEN amount ELSE 0 END), 0) AS this_year
+       FROM (
+         SELECT b.created_at AS day, b.vendor_payout AS amount
+         FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+         WHERE bk.vendor_id = :userId AND b.status IN ('paid', 'active', 'completed')
+           AND b.vendor_payout IS NOT NULL
+         UNION ALL
+         SELECT br.created_at AS day, br.total_amount AS amount
+         FROM bulk_rent_requests br
+         WHERE br.vendor_id = :userId AND br.status = 'paid'
+       ) combined`,
+      { userId: context.userId },
+    );
+    return (
+      rows as { today: number; this_week: number; this_month: number; this_year: number }[]
+    )[0];
+  });
+
 const vendorBikeSchema = z.object({
   name: z.string().trim().min(1).max(190),
   type: z.enum(["electric", "hybrid", "manual"]),
@@ -211,6 +321,7 @@ const vendorBikeSchema = z.object({
   image_url: z.string().trim().max(3_000_000).optional().nullable(),
   description: z.string().trim().max(2000).optional().nullable(),
   available: z.boolean(),
+  quantity: z.number().int().min(0).max(1000),
 });
 
 export const createVendorBike = createServerFn({ method: "POST" })
@@ -221,8 +332,8 @@ export const createVendorBike = createServerFn({ method: "POST" })
     const pool = await getPool();
     const id = crypto.randomUUID();
     await pool.execute(
-      `INSERT INTO bikes (id, name, type, price_per_day, image_url, description, available, vendor_id)
-       VALUES (:id, :name, :type, :price, :image, :description, :available, :vendorId)`,
+      `INSERT INTO bikes (id, name, type, price_per_day, image_url, description, available, quantity, vendor_id)
+       VALUES (:id, :name, :type, :price, :image, :description, :available, :quantity, :vendorId)`,
       {
         id,
         name: data.name,
@@ -231,6 +342,7 @@ export const createVendorBike = createServerFn({ method: "POST" })
         image: data.image_url || null,
         description: data.description || null,
         available: data.available,
+        quantity: data.quantity,
         vendorId: context.userId,
       },
     );
@@ -249,7 +361,7 @@ export const updateVendorBike = createServerFn({ method: "POST" })
 
     await pool.execute(
       `UPDATE bikes SET name = :name, type = :type, price_per_day = :price, image_url = :image,
-              description = :description, available = :available
+              description = :description, available = :available, quantity = :quantity
        WHERE id = :id AND vendor_id = :vendorId`,
       {
         id: data.id,
@@ -259,6 +371,7 @@ export const updateVendorBike = createServerFn({ method: "POST" })
         image: data.image_url || null,
         description: data.description || null,
         available: data.available,
+        quantity: data.quantity,
         vendorId: context.userId,
       },
     );
@@ -426,3 +539,32 @@ export const listVendorReviews = createServerFn({ method: "GET" })
     );
     return rows;
   });
+
+// Public directory of approved vendors who have at least one bike
+// listed — used by the bulk-rent "pick a vendor" screen.
+export const listVendorStorefronts = createServerFn({ method: "GET" }).handler(async () => {
+  const pool = await getPool();
+  const [rows] = await pool.query(
+    `SELECT vp.user_id AS vendor_id, vp.business_name, vp.business_address,
+            COUNT(bk.id) AS bike_count
+     FROM vendor_profiles vp
+     JOIN bikes bk ON bk.vendor_id = vp.user_id
+     WHERE vp.status = 'approved'
+     GROUP BY vp.user_id, vp.business_name, vp.business_address
+     HAVING bike_count > 0
+     ORDER BY vp.business_name ASC`,
+  );
+  return (
+    rows as {
+      vendor_id: string;
+      business_name: string;
+      business_address: string | null;
+      bike_count: number;
+    }[]
+  ).map((r) => ({
+    vendorId: r.vendor_id,
+    businessName: r.business_name,
+    location: r.business_address,
+    bikeCount: Number(r.bike_count),
+  }));
+});

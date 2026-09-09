@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { SiteHeader } from "@/components/site-header";
@@ -6,11 +6,22 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Users, Building2, Calendar, Tag, CheckCircle2 } from "lucide-react";
-import { submitBulkRentRequest } from "@/lib/bulk-rent.functions";
+import {
+  Users,
+  Building2,
+  Calendar,
+  Tag,
+  CheckCircle2,
+  Store,
+  MapPin,
+  Loader2,
+  XCircle,
+} from "lucide-react";
+import { submitBulkRentRequest, listMyBulkRentRequests } from "@/lib/bulk-rent.functions";
+import { listVendorStorefronts } from "@/lib/vendor.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { myRole } from "@/lib/auth.functions";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import bike1 from "@/assets/bike-1.jpg";
 
 export const Route = createFileRoute("/bulk-rent")({
@@ -24,7 +35,23 @@ const tiers = [
   { qty: "26+ bikes", off: "25% off", note: "Corporate events & expos" },
 ];
 
+const statusStyles: Record<string, string> = {
+  pending: "bg-yellow-100 text-yellow-800",
+  quoted: "bg-blue-100 text-blue-800",
+  paid: "bg-green-100 text-green-800",
+  rejected: "bg-red-100 text-red-800",
+};
+
+const statusLabels: Record<string, string> = {
+  pending: "Awaiting vendor review",
+  quoted: "Quote received",
+  paid: "Confirmed & paid",
+  rejected: "Declined",
+};
+
 function BulkRent() {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const submitRequest = useServerFn(submitBulkRentRequest);
   const { user } = useAuth();
   const fetchMyRole = useServerFn(myRole);
@@ -36,7 +63,22 @@ function BulkRent() {
     throwOnError: false,
   });
   const isStaff = roleData?.isStaff ?? false;
+
+  const fetchVendors = useServerFn(listVendorStorefronts);
+  const { data: vendors, isLoading: vendorsLoading } = useQuery({
+    queryKey: ["vendor-storefronts"],
+    queryFn: () => fetchVendors(),
+  });
+
+  const fetchMyRequests = useServerFn(listMyBulkRentRequests);
+  const { data: myRequests } = useQuery({
+    queryKey: ["my-bulk-rent-requests"],
+    queryFn: () => fetchMyRequests(),
+    enabled: !!user && !isStaff,
+  });
+
   const [form, setForm] = useState({
+    vendor_id: "",
     organization: "",
     contact_email: "",
     bike_count: "",
@@ -49,7 +91,12 @@ function BulkRent() {
 
   async function submit() {
     setError(null);
+    if (!user) {
+      navigate({ to: "/auth" });
+      return;
+    }
     const count = Number(form.bike_count);
+    if (!form.vendor_id) return setError("Please choose which vendor you'd like to rent from");
     if (!form.organization.trim()) return setError("Organization is required");
     if (!form.contact_email.trim()) return setError("Contact email is required");
     if (!count || count < 1) return setError("Enter a valid number of bikes");
@@ -58,6 +105,7 @@ function BulkRent() {
     try {
       await submitRequest({
         data: {
+          vendor_id: form.vendor_id,
           organization: form.organization,
           contact_email: form.contact_email,
           bike_count: count,
@@ -66,11 +114,24 @@ function BulkRent() {
         },
       });
       setSubmitted(true);
+      qc.invalidateQueries({ queryKey: ["my-bulk-rent-requests"] });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not submit request");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function startAnother() {
+    setSubmitted(false);
+    setForm({
+      vendor_id: "",
+      organization: "",
+      contact_email: "",
+      bike_count: "",
+      event_date: "",
+      notes: "",
+    });
   }
 
   return (
@@ -86,11 +147,11 @@ function BulkRent() {
               Bulk Bicycle Rental
             </h1>
             <p className="text-muted-foreground mt-3">
-              Renting for a school trip, corporate retreat, or a community ride? Reserve in bulk and
-              unlock tiered pricing, dedicated support, and on-site delivery.
+              Renting for a school trip, corporate retreat, or a community ride? Pick a vendor, tell
+              them what you need, and they'll send you a quote directly.
             </p>
           </div>
-          <div className="aspect-[4/3] rounded-xl overflow-hidden">
+          <div className="aspect- 4/3 rounded-xl overflow-hidden">
             <img src={bike1} alt="Group rental" className="w-full h-full object-cover" />
           </div>
         </div>
@@ -106,14 +167,33 @@ function BulkRent() {
           ))}
         </div>
 
-        <Card className="p-8 border-0 shadow-sm">
-          {submitted ? (
+        <Card className="p-8 border-0 shadow-sm mb-10">
+          {!user ? (
+            <div className="text-center py-8">
+              <Building2 className="size-10 text-muted-foreground mx-auto mb-3" />
+              <h2 className="text-xl font-bold">Sign in to request a bulk quote</h2>
+              <p className="text-sm text-muted-foreground mt-1 mb-5">
+                Create a free account or sign in to submit a bulk rental request — this lets the
+                vendor follow up with you directly.
+              </p>
+              <Button
+                className="bg-primary hover:bg-primary/90"
+                onClick={() => navigate({ to: "/auth" })}
+              >
+                Sign In / Create Account
+              </Button>
+            </div>
+          ) : submitted ? (
             <div className="text-center py-8">
               <CheckCircle2 className="size-10 text-primary mx-auto mb-3" />
-              <h2 className="text-xl font-bold">Request received!</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                We'll reach out to {form.contact_email} within 24 hours.
+              <h2 className="text-xl font-bold">Request sent to the vendor!</h2>
+              <p className="text-sm text-muted-foreground mt-1 mb-5">
+                They'll review it and send you a quote — check "My Bulk Requests" below for updates,
+                or watch your notifications.
               </p>
+              <Button variant="outline" onClick={startAnother}>
+                Submit another request
+              </Button>
             </div>
           ) : (
             <>
@@ -121,8 +201,49 @@ function BulkRent() {
                 <Building2 className="size-5 text-primary" /> Request a Bulk Quote
               </h2>
               <p className="text-sm text-muted-foreground mb-6">
-                Tell us about your event and we'll respond within 24 hours.
+                Choose a vendor and tell them about your event — only they'll see this request.
               </p>
+
+              <div className="mb-5">
+                <label className="text-xs text-muted-foreground">Which vendor?</label>
+                {vendorsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                    <Loader2 className="size-4 animate-spin" /> Loading vendors…
+                  </div>
+                ) : (vendors?.length ?? 0) === 0 ? (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    No vendors are available for bulk requests right now.
+                  </p>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-3 mt-2">
+                    {vendors?.map((v) => (
+                      <button
+                        key={v.vendorId}
+                        type="button"
+                        onClick={() => setForm({ ...form, vendor_id: v.vendorId })}
+                        className={`text-left p-3 rounded-lg border transition-colors ${
+                          form.vendor_id === v.vendorId
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 font-semibold text-sm">
+                          <Store className="size-3.5 text-primary" /> {v.businessName}
+                        </div>
+                        {v.location && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                            <MapPin className="size-3" /> {v.location}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {v.bikeCount} bike{v.bikeCount === 1 ? "" : "s"} listed
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-muted-foreground">Organization</label>
@@ -214,6 +335,73 @@ function BulkRent() {
             </>
           )}
         </Card>
+
+        {user && !isStaff && (myRequests?.length ?? 0) > 0 && (
+          <div>
+            <h2 className="text-xl font-bold mb-4">My Bulk Requests</h2>
+            <div className="space-y-4">
+              {myRequests?.map((r) => (
+                <Card key={r.id} className="p-5 border-0 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+                    <div>
+                      <div className="font-semibold text-sm">{r.organization}</div>
+                      {r.vendor_business_name && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                          <Store className="size-3" /> {r.vendor_business_name}
+                          {r.vendor_location ? ` · ${r.vendor_location}` : ""}
+                        </div>
+                      )}
+                    </div>
+                    <span
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusStyles[r.status] ?? "bg-muted text-muted-foreground"}`}
+                    >
+                      {statusLabels[r.status] ?? r.status}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {r.bike_count} bikes
+                    {r.event_date ? ` · Event: ${new Date(r.event_date).toLocaleDateString()}` : ""}
+                  </div>
+
+                  {r.status === "quoted" && (
+                    <div className="mt-3 bg-blue-50 border border-blue-100 rounded-md p-3 text-sm">
+                      <div className="font-semibold text-blue-900">
+                        Quote: NPR {Number(r.price_per_bike).toFixed(0)}/bike · Total NPR{" "}
+                        {Number(r.total_amount).toFixed(0)}
+                      </div>
+                      {r.pickup_location && (
+                        <div className="text-xs text-blue-800 mt-1 flex items-center gap-1">
+                          <MapPin className="size-3" /> Pickup: {r.pickup_location}
+                        </div>
+                      )}
+                      {r.vendor_notes && (
+                        <div className="text-xs text-blue-800 mt-1">"{r.vendor_notes}"</div>
+                      )}
+                      <p className="text-xs text-blue-700 mt-2">
+                        Arrange payment directly with the vendor — they'll confirm your booking once
+                        received.
+                      </p>
+                    </div>
+                  )}
+
+                  {r.status === "paid" && (
+                    <div className="mt-3 flex items-center gap-1 text-sm text-green-700 font-medium">
+                      <CheckCircle2 className="size-4" /> Payment confirmed — total NPR{" "}
+                      {Number(r.total_amount).toFixed(0)}
+                    </div>
+                  )}
+
+                  {r.status === "rejected" && (
+                    <div className="mt-3 flex items-start gap-1 text-sm text-destructive">
+                      <XCircle className="size-4 shrink-0 mt-0.5" />
+                      {r.rejection_reason ?? "This vendor couldn't fulfil the request."}
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

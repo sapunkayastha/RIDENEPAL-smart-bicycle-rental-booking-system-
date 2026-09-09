@@ -75,11 +75,18 @@ function PaymentReturn() {
               </p>
               <div className="flex flex-col gap-2 mt-6">
                 {bookingId && (
-                  <Button asChild className="bg-primary hover:bg-primary/90">
-                    <Link to="/track/$bookingId" params={{ bookingId }}>
-                      Start Live Tracking
-                    </Link>
-                  </Button>
+                  <>
+                    <Button asChild className="bg-primary hover:bg-primary/90">
+                      <Link to="/receipt/$bookingId" params={{ bookingId }}>
+                        View Digital Receipt
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline">
+                      <Link to="/track/$bookingId" params={{ bookingId }}>
+                        Start Live Tracking
+                      </Link>
+                    </Button>
+                  </>
                 )}
                 <Button asChild variant="outline">
                   <Link to="/dashboard">Go to Dashboard</Link>

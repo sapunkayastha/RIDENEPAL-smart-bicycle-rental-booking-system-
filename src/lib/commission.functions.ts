@@ -37,30 +37,54 @@ export const setCommissionRate = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const getCommissionSummary = createServerFn({ method: "GET" })
+export const listVendorsForFilter = createServerFn({ method: "GET" })
   .middleware([requireMysqlAuth])
   .handler(async ({ context }) => {
     await assertSuperAdmin(context.userId);
     const pool = await getPool();
+    const [rows] = await pool.query(
+      `SELECT u.id AS vendor_id, vp.business_name
+       FROM vendor_profiles vp JOIN users u ON u.id = vp.user_id
+       WHERE vp.status = 'approved'
+       ORDER BY vp.business_name ASC`,
+    );
+    return (rows as { vendor_id: string; business_name: string }[]).map((r) => ({
+      vendorId: r.vendor_id,
+      businessName: r.business_name,
+    }));
+  });
+
+export const getCommissionSummary = createServerFn({ method: "GET" })
+  .middleware([requireMysqlAuth])
+  .inputValidator((input: { vendorId?: string } | undefined) => input ?? {})
+  .handler(async ({ data, context }) => {
+    await assertSuperAdmin(context.userId);
+    const pool = await getPool();
+    const vendorFilter = data.vendorId ? "AND bk.vendor_id = :vendorId" : "";
 
     const [totals] = await pool.query(
       `SELECT
-         COALESCE(SUM(platform_commission), 0) AS total_commission,
-         COALESCE(SUM(vendor_payout), 0) AS total_payouts,
+         COALESCE(SUM(b.platform_commission), 0) AS total_commission,
+         COALESCE(SUM(b.vendor_payout), 0) AS total_payouts,
          COUNT(*) AS paid_bookings
-       FROM bookings
-       WHERE status IN ('paid', 'active', 'completed') AND platform_commission IS NOT NULL`,
+       FROM bookings b
+       JOIN bikes bk ON bk.id = b.bike_id
+       WHERE b.status IN ('paid', 'active', 'completed') AND b.platform_commission IS NOT NULL
+         ${vendorFilter}`,
+      { vendorId: data.vendorId },
     );
 
     const [rows] = await pool.query(
       `SELECT b.id, b.total_amount, b.platform_commission, b.vendor_payout, b.created_at,
-              bk.name AS bike_name, u.full_name AS vendor_name
+              bk.name AS bike_name, bk.vendor_id, u.full_name AS vendor_name
        FROM bookings b
        JOIN bikes bk ON bk.id = b.bike_id
        LEFT JOIN users u ON u.id = bk.vendor_id
        WHERE b.status IN ('paid', 'active', 'completed') AND b.platform_commission IS NOT NULL
+         ${vendorFilter}
        ORDER BY b.created_at DESC
        LIMIT 100`,
+      { vendorId: data.vendorId },
     );
 
     return {

@@ -26,10 +26,13 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminLoginRouteImport } from './routes/admin-login'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as VendorVendorIdRouteImport } from './routes/vendor.$vendorId'
+import { Route as ReceiptBookingIdRouteImport } from './routes/receipt.$bookingId'
 import { Route as BikeBikeIdRouteImport } from './routes/bike.$bikeId'
 import { Route as ApiGalleryUploadRouteImport } from './routes/api/gallery-upload'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as AuthenticatedVendorDashboardRouteImport } from './routes/_authenticated/vendor-dashboard'
+import { Route as AuthenticatedVendorAnalyticsRouteImport } from './routes/_authenticated/vendor-analytics'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/_admin/route'
@@ -42,6 +45,7 @@ import { Route as AuthenticatedAdminMessagesRouteImport } from './routes/_authen
 import { Route as AuthenticatedAdminManageBikesRouteImport } from './routes/_authenticated/_admin/manage-bikes'
 import { Route as AuthenticatedAdminCommissionsRouteImport } from './routes/_authenticated/_admin/commissions'
 import { Route as AuthenticatedAdminAdminRouteImport } from './routes/_authenticated/_admin/admin'
+import { Route as AuthenticatedAdminVendorDetailVendorIdRouteImport } from './routes/_authenticated/_admin/vendor-detail.$vendorId'
 import { Route as AuthenticatedAdminCustomerUserIdRouteImport } from './routes/_authenticated/_admin/customer.$userId'
 
 const VerifyOtpRoute = VerifyOtpRouteImport.update({
@@ -128,6 +132,16 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VendorVendorIdRoute = VendorVendorIdRouteImport.update({
+  id: '/vendor/$vendorId',
+  path: '/vendor/$vendorId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceiptBookingIdRoute = ReceiptBookingIdRouteImport.update({
+  id: '/receipt/$bookingId',
+  path: '/receipt/$bookingId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BikeBikeIdRoute = BikeBikeIdRouteImport.update({
   id: '/bike/$bikeId',
   path: '/bike/$bikeId',
@@ -147,6 +161,12 @@ const AuthenticatedVendorDashboardRoute =
   AuthenticatedVendorDashboardRouteImport.update({
     id: '/vendor-dashboard',
     path: '/vendor-dashboard',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedVendorAnalyticsRoute =
+  AuthenticatedVendorAnalyticsRouteImport.update({
+    id: '/vendor-analytics',
+    path: '/vendor-analytics',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
@@ -216,6 +236,12 @@ const AuthenticatedAdminAdminRoute = AuthenticatedAdminAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => AuthenticatedAdminRouteRoute,
 } as any)
+const AuthenticatedAdminVendorDetailVendorIdRoute =
+  AuthenticatedAdminVendorDetailVendorIdRouteImport.update({
+    id: '/vendor-detail/$vendorId',
+    path: '/vendor-detail/$vendorId',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const AuthenticatedAdminCustomerUserIdRoute =
   AuthenticatedAdminCustomerUserIdRouteImport.update({
     id: '/customer/$userId',
@@ -242,10 +268,13 @@ export interface FileRoutesByFullPath {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/vendor-analytics': typeof AuthenticatedVendorAnalyticsRoute
   '/vendor-dashboard': typeof AuthenticatedVendorDashboardRoute
   '/api/chat': typeof ApiChatRoute
   '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
+  '/receipt/$bookingId': typeof ReceiptBookingIdRoute
+  '/vendor/$vendorId': typeof VendorVendorIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
   '/commissions': typeof AuthenticatedAdminCommissionsRoute
   '/manage-bikes': typeof AuthenticatedAdminManageBikesRoute
@@ -256,6 +285,7 @@ export interface FileRoutesByFullPath {
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
   '/customer/$userId': typeof AuthenticatedAdminCustomerUserIdRoute
+  '/vendor-detail/$vendorId': typeof AuthenticatedAdminVendorDetailVendorIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -276,10 +306,13 @@ export interface FileRoutesByTo {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/profile': typeof AuthenticatedProfileRoute
+  '/vendor-analytics': typeof AuthenticatedVendorAnalyticsRoute
   '/vendor-dashboard': typeof AuthenticatedVendorDashboardRoute
   '/api/chat': typeof ApiChatRoute
   '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
+  '/receipt/$bookingId': typeof ReceiptBookingIdRoute
+  '/vendor/$vendorId': typeof VendorVendorIdRoute
   '/admin': typeof AuthenticatedAdminAdminRoute
   '/commissions': typeof AuthenticatedAdminCommissionsRoute
   '/manage-bikes': typeof AuthenticatedAdminManageBikesRoute
@@ -290,6 +323,7 @@ export interface FileRoutesByTo {
   '/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
   '/customer/$userId': typeof AuthenticatedAdminCustomerUserIdRoute
+  '/vendor-detail/$vendorId': typeof AuthenticatedAdminVendorDetailVendorIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -313,10 +347,13 @@ export interface FileRoutesById {
   '/_authenticated/_admin': typeof AuthenticatedAdminRouteRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/vendor-analytics': typeof AuthenticatedVendorAnalyticsRoute
   '/_authenticated/vendor-dashboard': typeof AuthenticatedVendorDashboardRoute
   '/api/chat': typeof ApiChatRoute
   '/api/gallery-upload': typeof ApiGalleryUploadRoute
   '/bike/$bikeId': typeof BikeBikeIdRoute
+  '/receipt/$bookingId': typeof ReceiptBookingIdRoute
+  '/vendor/$vendorId': typeof VendorVendorIdRoute
   '/_authenticated/_admin/admin': typeof AuthenticatedAdminAdminRoute
   '/_authenticated/_admin/commissions': typeof AuthenticatedAdminCommissionsRoute
   '/_authenticated/_admin/manage-bikes': typeof AuthenticatedAdminManageBikesRoute
@@ -327,6 +364,7 @@ export interface FileRoutesById {
   '/_authenticated/extend/$bookingId': typeof AuthenticatedExtendBookingIdRoute
   '/_authenticated/track/$bookingId': typeof AuthenticatedTrackBookingIdRoute
   '/_authenticated/_admin/customer/$userId': typeof AuthenticatedAdminCustomerUserIdRoute
+  '/_authenticated/_admin/vendor-detail/$vendorId': typeof AuthenticatedAdminVendorDetailVendorIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -349,10 +387,13 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard'
     | '/profile'
+    | '/vendor-analytics'
     | '/vendor-dashboard'
     | '/api/chat'
     | '/api/gallery-upload'
     | '/bike/$bikeId'
+    | '/receipt/$bookingId'
+    | '/vendor/$vendorId'
     | '/admin'
     | '/commissions'
     | '/manage-bikes'
@@ -363,6 +404,7 @@ export interface FileRouteTypes {
     | '/extend/$bookingId'
     | '/track/$bookingId'
     | '/customer/$userId'
+    | '/vendor-detail/$vendorId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -383,10 +425,13 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard'
     | '/profile'
+    | '/vendor-analytics'
     | '/vendor-dashboard'
     | '/api/chat'
     | '/api/gallery-upload'
     | '/bike/$bikeId'
+    | '/receipt/$bookingId'
+    | '/vendor/$vendorId'
     | '/admin'
     | '/commissions'
     | '/manage-bikes'
@@ -397,6 +442,7 @@ export interface FileRouteTypes {
     | '/extend/$bookingId'
     | '/track/$bookingId'
     | '/customer/$userId'
+    | '/vendor-detail/$vendorId'
   id:
     | '__root__'
     | '/'
@@ -419,10 +465,13 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin'
     | '/_authenticated/dashboard'
     | '/_authenticated/profile'
+    | '/_authenticated/vendor-analytics'
     | '/_authenticated/vendor-dashboard'
     | '/api/chat'
     | '/api/gallery-upload'
     | '/bike/$bikeId'
+    | '/receipt/$bookingId'
+    | '/vendor/$vendorId'
     | '/_authenticated/_admin/admin'
     | '/_authenticated/_admin/commissions'
     | '/_authenticated/_admin/manage-bikes'
@@ -433,6 +482,7 @@ export interface FileRouteTypes {
     | '/_authenticated/extend/$bookingId'
     | '/_authenticated/track/$bookingId'
     | '/_authenticated/_admin/customer/$userId'
+    | '/_authenticated/_admin/vendor-detail/$vendorId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -456,6 +506,8 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiGalleryUploadRoute: typeof ApiGalleryUploadRoute
   BikeBikeIdRoute: typeof BikeBikeIdRoute
+  ReceiptBookingIdRoute: typeof ReceiptBookingIdRoute
+  VendorVendorIdRoute: typeof VendorVendorIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -579,6 +631,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vendor/$vendorId': {
+      id: '/vendor/$vendorId'
+      path: '/vendor/$vendorId'
+      fullPath: '/vendor/$vendorId'
+      preLoaderRoute: typeof VendorVendorIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/receipt/$bookingId': {
+      id: '/receipt/$bookingId'
+      path: '/receipt/$bookingId'
+      fullPath: '/receipt/$bookingId'
+      preLoaderRoute: typeof ReceiptBookingIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bike/$bikeId': {
       id: '/bike/$bikeId'
       path: '/bike/$bikeId'
@@ -605,6 +671,13 @@ declare module '@tanstack/react-router' {
       path: '/vendor-dashboard'
       fullPath: '/vendor-dashboard'
       preLoaderRoute: typeof AuthenticatedVendorDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/vendor-analytics': {
+      id: '/_authenticated/vendor-analytics'
+      path: '/vendor-analytics'
+      fullPath: '/vendor-analytics'
+      preLoaderRoute: typeof AuthenticatedVendorAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/profile': {
@@ -691,6 +764,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
+    '/_authenticated/_admin/vendor-detail/$vendorId': {
+      id: '/_authenticated/_admin/vendor-detail/$vendorId'
+      path: '/vendor-detail/$vendorId'
+      fullPath: '/vendor-detail/$vendorId'
+      preLoaderRoute: typeof AuthenticatedAdminVendorDetailVendorIdRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/_authenticated/_admin/customer/$userId': {
       id: '/_authenticated/_admin/customer/$userId'
       path: '/customer/$userId'
@@ -709,6 +789,7 @@ interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminTrackingRoute: typeof AuthenticatedAdminTrackingRoute
   AuthenticatedAdminVendorsRoute: typeof AuthenticatedAdminVendorsRoute
   AuthenticatedAdminCustomerUserIdRoute: typeof AuthenticatedAdminCustomerUserIdRoute
+  AuthenticatedAdminVendorDetailVendorIdRoute: typeof AuthenticatedAdminVendorDetailVendorIdRoute
 }
 
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
@@ -721,6 +802,8 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminVendorsRoute: AuthenticatedAdminVendorsRoute,
     AuthenticatedAdminCustomerUserIdRoute:
       AuthenticatedAdminCustomerUserIdRoute,
+    AuthenticatedAdminVendorDetailVendorIdRoute:
+      AuthenticatedAdminVendorDetailVendorIdRoute,
   }
 
 const AuthenticatedAdminRouteRouteWithChildren =
@@ -732,6 +815,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedVendorAnalyticsRoute: typeof AuthenticatedVendorAnalyticsRoute
   AuthenticatedVendorDashboardRoute: typeof AuthenticatedVendorDashboardRoute
   AuthenticatedCheckoutBookingIdRoute: typeof AuthenticatedCheckoutBookingIdRoute
   AuthenticatedExtendBookingIdRoute: typeof AuthenticatedExtendBookingIdRoute
@@ -742,6 +826,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedVendorAnalyticsRoute: AuthenticatedVendorAnalyticsRoute,
   AuthenticatedVendorDashboardRoute: AuthenticatedVendorDashboardRoute,
   AuthenticatedCheckoutBookingIdRoute: AuthenticatedCheckoutBookingIdRoute,
   AuthenticatedExtendBookingIdRoute: AuthenticatedExtendBookingIdRoute,
@@ -772,6 +857,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiGalleryUploadRoute: ApiGalleryUploadRoute,
   BikeBikeIdRoute: BikeBikeIdRoute,
+  ReceiptBookingIdRoute: ReceiptBookingIdRoute,
+  VendorVendorIdRoute: VendorVendorIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -54,6 +54,7 @@ function VendorRegister() {
     password: "",
     fullName: "",
     businessName: "",
+    location: "",
     panNumber: "",
     vatNumber: "",
   });
@@ -69,6 +70,7 @@ function VendorRegister() {
           password: form.password,
           fullName: form.fullName,
           businessName: form.businessName,
+          location: form.location,
           panNumber: form.panNumber,
           vatNumber: form.vatNumber || undefined,
           idDocument,
@@ -143,6 +145,17 @@ function VendorRegister() {
               value={form.businessName}
               onChange={(e) => set("businessName", e.target.value)}
             />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Shop / pickup location</label>
+            <Input
+              placeholder="e.g. Thamel, Kathmandu"
+              value={form.location}
+              onChange={(e) => set("location", e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Shown to customers so they know where to pick up your bikes.
+            </p>
           </div>
           <div>
             <label className="text-xs text-muted-foreground">PAN number</label>

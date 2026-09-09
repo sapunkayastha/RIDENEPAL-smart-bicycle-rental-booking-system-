@@ -41,6 +41,8 @@ type Bike = {
   image_url: string | null;
   description: string | null;
   available: boolean | number;
+  quantity: number;
+  vendor_name?: string | null;
 };
 
 function Fleet() {
@@ -172,6 +174,11 @@ function Fleet() {
                     <span className="absolute top-2 right-2 bg-primary text-primary-foreground text-[10px] px-2 py-1 rounded-full font-semibold uppercase">
                       {b.type}
                     </span>
+                    {b.quantity <= 0 && (
+                      <span className="absolute top-2 left-2 bg-red-600 text-white text-[10px] px-2 py-1 rounded-full font-semibold uppercase">
+                        Out of Stock
+                      </span>
+                    )}
                   </div>
                   <div className="p-4">
                     <Link
@@ -182,6 +189,9 @@ function Fleet() {
                     >
                       {b.name}
                     </Link>
+                    {b.vendor_name && (
+                      <p className="text-[11px] text-muted-foreground">by {b.vendor_name}</p>
+                    )}
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 mb-3">
                       <Star className="size-3 fill-current text-primary" /> 4.8 ·{" "}
                       {b.description?.slice(0, 40) ?? "Premium bike"}
@@ -206,9 +216,10 @@ function Fleet() {
                         <Button
                           onClick={() => goToBike(b.id)}
                           size="sm"
+                          disabled={b.quantity <= 0}
                           className="bg-primary hover:bg-primary/90"
                         >
-                          Book Now
+                          {b.quantity <= 0 ? "Out of Stock" : "Book Now"}
                         </Button>
                       </div>
                     </div>

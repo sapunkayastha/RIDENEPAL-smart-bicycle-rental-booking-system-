@@ -401,10 +401,10 @@ export const completeBooking = createServerFn({ method: "POST" })
     await assertStaff(context.userId);
     const pool = (await import("@/lib/mysql/db.server")).default;
 
-    const [rows] = await pool.query("SELECT id, status FROM bookings WHERE id = :id", {
+    const [rows] = await pool.query("SELECT id, bike_id, status FROM bookings WHERE id = :id", {
       id: data.bookingId,
     });
-    const booking = (rows as { id: string; status: string }[])[0];
+    const booking = (rows as { id: string; bike_id: string; status: string }[])[0];
     if (!booking) throw new Error("Booking not found");
     if (!["paid", "active"].includes(booking.status)) {
       throw new Error("Only active bookings can be marked completed");
@@ -412,6 +412,11 @@ export const completeBooking = createServerFn({ method: "POST" })
 
     await pool.execute("UPDATE bookings SET status = 'completed' WHERE id = :id", {
       id: data.bookingId,
+    });
+
+    // The bike has been returned — it's back in stock.
+    await pool.execute("UPDATE bikes SET quantity = quantity + 1 WHERE id = :id", {
+      id: booking.bike_id,
     });
 
     await pool.execute(
@@ -536,4 +541,96 @@ export const listAuditLog = createServerFn({ method: "GET" })
       createdAt: r.created_at,
       actorEmail: r.actor_email,
     }));
+  });
+
+export const getVendorFullDetails = createServerFn({ method: "GET" })
+  .inputValidator((input: { vendorId: string }) => {
+    if (!input?.vendorId) throw new Error("vendorId is required");
+    return input;
+  })
+  .middleware([requireMysqlAuth])
+  .handler(async ({ data, context }) => {
+    await assertSuperAdmin(context.userId);
+    const pool = (await import("@/lib/mysql/db.server")).default;
+
+    const [profileRows] = await pool.query(
+      `SELECT u.id AS vendor_id, u.email, u.full_name, u.phone,
+              vp.business_name, vp.pan_number, vp.vat_number, vp.business_address,
+              vp.status, vp.id_document, vp.created_at
+       FROM vendor_profiles vp JOIN users u ON u.id = vp.user_id
+       WHERE vp.user_id = :vendorId`,
+      { vendorId: data.vendorId },
+    );
+    const profile = (
+      profileRows as {
+        vendor_id: string;
+        email: string;
+        full_name: string | null;
+        phone: string | null;
+        business_name: string;
+        pan_number: string;
+        vat_number: string | null;
+        business_address: string | null;
+        status: string;
+        id_document: string | null;
+        created_at: string;
+      }[]
+    )[0];
+    if (!profile) throw new Error("Vendor not found");
+
+    const [bikeRows] = await pool.query(
+      `SELECT bk.id, bk.name, bk.type, bk.price_per_day, bk.quantity, bk.available,
+              COALESCE((
+                SELECT COUNT(*) FROM bookings b
+                WHERE b.bike_id = bk.id AND b.status IN ('pending', 'paid', 'active')
+              ), 0) AS currently_rented
+       FROM bikes bk WHERE bk.vendor_id = :vendorId
+       ORDER BY bk.name ASC`,
+      { vendorId: data.vendorId },
+    );
+
+    const [bookingRows] = await pool.query(
+      `SELECT b.id, b.status, b.total_amount, b.platform_commission, b.vendor_payout,
+              b.created_at, bk.name AS bike_name
+       FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+       WHERE bk.vendor_id = :vendorId
+       ORDER BY b.created_at DESC
+       LIMIT 50`,
+      { vendorId: data.vendorId },
+    );
+
+    type VendorBikeRow = {
+      id: string;
+      name: string;
+      type: string;
+      price_per_day: number;
+      quantity: number;
+      available: number;
+      currently_rented: number;
+    };
+
+    type VendorBookingRow = {
+      id: string;
+      status: string;
+      total_amount: number;
+      platform_commission: number | null;
+      vendor_payout: number | null;
+      created_at: string;
+      bike_name: string;
+    };
+
+    const [earningsRows] = await pool.query(
+      `SELECT COALESCE(SUM(b.vendor_payout), 0) AS total_earned, COUNT(*) AS paid_bookings
+       FROM bookings b JOIN bikes bk ON bk.id = b.bike_id
+       WHERE bk.vendor_id = :vendorId
+         AND b.status IN ('paid', 'active', 'completed') AND b.vendor_payout IS NOT NULL`,
+      { vendorId: data.vendorId },
+    );
+
+    return {
+      profile,
+      bikes: bikeRows as VendorBikeRow[],
+      bookings: bookingRows as VendorBookingRow[],
+      earnings: (earningsRows as { total_earned: number; paid_bookings: number }[])[0],
+    };
   });

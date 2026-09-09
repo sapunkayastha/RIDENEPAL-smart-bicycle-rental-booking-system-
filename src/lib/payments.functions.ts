@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
+import { calculateCommissionSplit } from "@/lib/pricing";
 import { requireMysqlAuth } from "@/lib/auth/auth-middleware";
 
 // eSewa sandbox credentials (public test creds documented by eSewa)
@@ -45,8 +46,7 @@ async function applyCommission(bookingId: string) {
   // rate% of the total, whether the bike is platform-owned or listed
   // by a vendor. The remainder goes to that bike's account (the
   // vendor's, or the managing admin's for platform-owned bikes).
-  const commission = Math.round(total * (rate / 100) * 100) / 100;
-  const payout = Math.round((total - commission) * 100) / 100;
+  const { commission, payout } = calculateCommissionSplit(total, rate);
 
   await pool.execute(
     "UPDATE bookings SET platform_commission = :commission, vendor_payout = :payout WHERE id = :id",

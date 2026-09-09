@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -10,6 +10,7 @@ import {
   getCommissionRate,
   setCommissionRate,
   getCommissionSummary,
+  listVendorsForFilter,
 } from "@/lib/commission.functions";
 import { toast } from "sonner";
 
@@ -25,6 +26,7 @@ type BookingRow = {
   vendor_payout: number;
   created_at: string;
   bike_name: string;
+  vendor_id: string | null;
   vendor_name: string | null;
 };
 
@@ -32,17 +34,25 @@ function Commissions() {
   const fetchRate = useServerFn(getCommissionRate);
   const saveRate = useServerFn(setCommissionRate);
   const fetchSummary = useServerFn(getCommissionSummary);
+  const fetchVendors = useServerFn(listVendorsForFilter);
   const qc = useQueryClient();
   const [rateInput, setRateInput] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
 
   const { data: rateData } = useQuery({
     queryKey: ["commission-rate"],
     queryFn: () => fetchRate(),
   });
+
+  const { data: vendors } = useQuery({
+    queryKey: ["commission-vendor-list"],
+    queryFn: () => fetchVendors() as Promise<{ vendorId: string; businessName: string }[]>,
+  });
+
   const { data: summary, isLoading } = useQuery({
-    queryKey: ["commission-summary"],
+    queryKey: ["commission-summary", vendorFilter],
     queryFn: () =>
-      fetchSummary() as Promise<{
+      fetchSummary({ data: vendorFilter ? { vendorId: vendorFilter } : undefined }) as Promise<{
         totals: { total_commission: number; total_payouts: number; paid_bookings: number };
         bookings: BookingRow[];
       }>,
@@ -93,13 +103,17 @@ function Commissions() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="p-5 border-0 shadow-sm">
-            <div className="text-xs text-muted-foreground">Total commission earned</div>
+            <div className="text-xs text-muted-foreground">
+              {vendorFilter ? "Commission from this vendor" : "Total commission earned"}
+            </div>
             <div className="text-2xl font-bold text-primary mt-1">
               NPR {Number(summary?.totals.total_commission ?? 0).toFixed(0)}
             </div>
           </Card>
           <Card className="p-5 border-0 shadow-sm">
-            <div className="text-xs text-muted-foreground">Total paid out to vendors</div>
+            <div className="text-xs text-muted-foreground">
+              {vendorFilter ? "Paid out to this vendor" : "Total paid out to vendors"}
+            </div>
             <div className="text-2xl font-bold mt-1">
               NPR {Number(summary?.totals.total_payouts ?? 0).toFixed(0)}
             </div>
@@ -111,7 +125,31 @@ function Commissions() {
         </div>
 
         <Card className="p-5 border-0 shadow-sm">
-          <h2 className="font-semibold text-sm mb-4">Recent paid bookings</h2>
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+            <h2 className="font-semibold text-sm">
+              {vendorFilter ? "Bookings for this vendor" : "Recent paid bookings"}
+            </h2>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">Filter by vendor</label>
+              <select
+                className="border rounded-md text-sm px-2 py-1.5 bg-background"
+                value={vendorFilter}
+                onChange={(e) => setVendorFilter(e.target.value)}
+              >
+                <option value="">All vendors</option>
+                {vendors?.map((v) => (
+                  <option key={v.vendorId} value={v.vendorId}>
+                    {v.businessName}
+                  </option>
+                ))}
+              </select>
+              {vendorFilter && (
+                <Button size="sm" variant="outline" onClick={() => setVendorFilter("")}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </div>
           {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -128,7 +166,19 @@ function Commissions() {
                 {summary?.bookings.map((b) => (
                   <tr key={b.id} className="border-b last:border-0">
                     <td className="py-2 pr-4">{b.bike_name}</td>
-                    <td className="py-2 pr-4">{b.vendor_name ?? "Managing Admin"}</td>
+                    <td className="py-2 pr-4">
+                      {b.vendor_id ? (
+                        <Link
+                          to="/vendor-detail/$vendorId"
+                          params={{ vendorId: b.vendor_id }}
+                          className="text-primary hover:underline"
+                        >
+                          {b.vendor_name ?? "View vendor"}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">Managing Admin</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-4 text-right">
                       NPR {Number(b.total_amount).toFixed(0)}
                     </td>
@@ -143,7 +193,9 @@ function Commissions() {
               </tbody>
             </table>
             {summary?.bookings.length === 0 && !isLoading && (
-              <p className="text-sm text-muted-foreground py-4">No paid bookings yet.</p>
+              <p className="text-sm text-muted-foreground py-4">
+                {vendorFilter ? "No bookings for this vendor yet." : "No paid bookings yet."}
+              </p>
             )}
           </div>
         </Card>

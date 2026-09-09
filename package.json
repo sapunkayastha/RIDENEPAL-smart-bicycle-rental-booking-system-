@@ -11,7 +11,9 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "mysql:setup": "node mysql-demo/setup.mjs",
-    "mysql:demo": "node mysql-demo/demo.mjs"
+    "mysql:demo": "node mysql-demo/demo.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.51",
@@ -44,7 +46,6 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
-
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-query": "^5.83.0",
     "@tanstack/react-router": "^1.168.25",
@@ -65,6 +66,7 @@
     "lucide-react": "^0.575.0",
     "mysql2": "^3.11.5",
     "nitro": "3.0.260603-beta",
+    "nodemailer": "^10.0.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
@@ -98,7 +100,8 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^5.0.0"
   },
   "version": "1.0.0",
   "description": "Smart bicycle rental and booking platform for Nepal.",

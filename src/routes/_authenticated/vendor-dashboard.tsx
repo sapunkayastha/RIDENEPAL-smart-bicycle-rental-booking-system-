@@ -9,11 +9,21 @@ import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import {
   getMyVendorProfile,
+  updateMyVendorProfile,
   listMyVendorBikes,
   createVendorBike,
+  updateVendorBike,
   applyAsVendorSelf,
   getMyVendorEarnings,
+  getMyVendorDailyCashFlow,
+  getMyVendorDashboardSummary,
 } from "@/lib/vendor.functions";
+import {
+  listVendorBulkRequests,
+  quoteBulkRentRequest,
+  rejectBulkRentRequest,
+  markBulkRentPaid,
+} from "@/lib/bulk-rent.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/vendor-dashboard")({
@@ -27,6 +37,8 @@ type Bike = {
   type: string;
   price_per_day: number;
   available: number;
+  quantity: number;
+  currently_rented: number;
   image_url?: string | null;
 };
 
@@ -189,12 +201,132 @@ function VendorDashboard() {
           vendor_payout: number;
           status: string;
           created_at: string;
+          source: "booking" | "bulk";
         }[];
       }>,
     enabled: profile?.status === "approved",
   });
 
-  const [form, setForm] = useState({ name: "", type: "manual", price: "", description: "" });
+  const fetchSummary = useServerFn(getMyVendorDashboardSummary);
+  const { data: dashSummary } = useQuery({
+    queryKey: ["my-vendor-dashboard-summary"],
+    queryFn: () =>
+      fetchSummary() as Promise<{
+        today: number;
+        this_week: number;
+        this_month: number;
+        this_year: number;
+      }>,
+    enabled: profile?.status === "approved",
+  });
+
+  const fetchCashFlow = useServerFn(getMyVendorDailyCashFlow);
+  const { data: cashFlow } = useQuery({
+    queryKey: ["my-vendor-cash-flow"],
+    queryFn: () =>
+      fetchCashFlow() as Promise<{ day: string; booking_count: number; earned: number }[]>,
+    enabled: profile?.status === "approved",
+  });
+
+  const fetchBulkRequests = useServerFn(listVendorBulkRequests);
+  const { data: bulkRequests } = useQuery({
+    queryKey: ["my-vendor-bulk-requests"],
+    queryFn: () =>
+      fetchBulkRequests() as Promise<
+        {
+          id: string;
+          organization: string;
+          contact_email: string;
+          bike_count: number;
+          event_date: string | null;
+          notes: string | null;
+          status: string;
+          customer_name: string | null;
+        }[]
+      >,
+    enabled: profile?.status === "approved",
+  });
+  const [quotingId, setQuotingId] = useState<string | null>(null);
+  const [quoteForm, setQuoteForm] = useState({ price: "", pickup: "", notes: "" });
+  const sendQuote = useServerFn(quoteBulkRentRequest);
+  const quoteMutation = useMutation({
+    mutationFn: (requestId: string) =>
+      sendQuote({
+        data: {
+          requestId,
+          pricePerBike: Number(quoteForm.price),
+          pickupLocation: quoteForm.pickup || undefined,
+          vendorNotes: quoteForm.notes || undefined,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Quote sent");
+      setQuotingId(null);
+      setQuoteForm({ price: "", pickup: "", notes: "" });
+      qc.invalidateQueries({ queryKey: ["my-vendor-bulk-requests"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to send quote"),
+  });
+
+  const reject = useServerFn(rejectBulkRentRequest);
+  const rejectMutation = useMutation({
+    mutationFn: (vars: { requestId: string; reason: string }) => reject({ data: vars }),
+    onSuccess: () => {
+      toast.success("Request declined");
+      qc.invalidateQueries({ queryKey: ["my-vendor-bulk-requests"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to decline"),
+  });
+
+  const confirmPaid = useServerFn(markBulkRentPaid);
+  const markPaidMutation = useMutation({
+    mutationFn: (requestId: string) => confirmPaid({ data: { requestId } }),
+    onSuccess: () => {
+      toast.success("Marked as paid");
+      qc.invalidateQueries({ queryKey: ["my-vendor-bulk-requests"] });
+      qc.invalidateQueries({ queryKey: ["my-vendor-earnings"] });
+      qc.invalidateQueries({ queryKey: ["my-vendor-cash-flow"] });
+      qc.invalidateQueries({ queryKey: ["my-vendor-dashboard-summary"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update"),
+  });
+
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    businessName: "",
+    panNumber: "",
+    vatNumber: "",
+    businessAddress: "",
+  });
+  const saveProfile = useServerFn(updateMyVendorProfile);
+  const profileMutation = useMutation({
+    mutationFn: () => saveProfile({ data: profileForm }),
+    onSuccess: () => {
+      toast.success("Profile updated");
+      setEditingProfile(false);
+      qc.invalidateQueries({ queryKey: ["my-vendor-profile"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update profile"),
+  });
+
+  function startEditingProfile() {
+    if (!profile) return;
+    setProfileForm({
+      businessName: profile.business_name ?? "",
+      panNumber: profile.pan_number ?? "",
+      vatNumber: profile.vat_number ?? "",
+      businessAddress: profile.business_address ?? "",
+    });
+    setEditingProfile(true);
+  }
+
+  const [form, setForm] = useState({
+    name: "",
+    type: "manual",
+    price: "",
+    description: "",
+    quantity: "1",
+  });
   const [bikeImage, setBikeImage] = useState<string | null>(null);
   const [bikeImageUploading, setBikeImageUploading] = useState(false);
 
@@ -221,15 +353,33 @@ function VendorDashboard() {
           description: form.description || null,
           image_url: bikeImage,
           available: true,
+          quantity: Math.max(0, Number(form.quantity) || 0),
         },
       }),
     onSuccess: () => {
       toast.success("Bike added");
-      setForm({ name: "", type: "manual", price: "", description: "" });
+      setForm({ name: "", type: "manual", price: "", description: "", quantity: "1" });
       setBikeImage(null);
       qc.invalidateQueries({ queryKey: ["my-vendor-bikes"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to add bike"),
+  });
+
+  const editStock = useServerFn(updateVendorBike);
+  const stockMutation = useMutation({
+    mutationFn: (bike: Bike) =>
+      editStock({
+        data: {
+          id: bike.id,
+          name: bike.name,
+          type: bike.type as "manual" | "hybrid" | "electric",
+          price_per_day: Number(bike.price_per_day),
+          available: Boolean(bike.available),
+          quantity: bike.quantity,
+        },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["my-vendor-bikes"] }),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update stock"),
   });
 
   if (isLoading) {
@@ -260,41 +410,135 @@ function VendorDashboard() {
         <h1 className="text-2xl font-bold">Vendor Dashboard</h1>
 
         <Card className="p-5 border-0 shadow-sm">
-          <div className="text-sm">
-            <span className="font-semibold">{profile.business_name}</span> · PAN{" "}
-            {profile.pan_number}
-          </div>
-          <div className="mt-2">
-            {profile.status === "pending" && (
-              <span className="text-xs font-semibold px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
-                PENDING REVIEW
-              </span>
-            )}
-            {profile.status === "approved" && (
-              <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">
-                APPROVED
-              </span>
-            )}
-            {profile.status === "rejected" && (
-              <>
-                <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">
-                  REJECTED
-                </span>
-                {profile.rejection_reason && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Reason: {profile.rejection_reason}
-                  </p>
+          {editingProfile ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground">Business name</label>
+                <Input
+                  value={profileForm.businessName}
+                  onChange={(e) => setProfileForm((f) => ({ ...f, businessName: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">PAN number</label>
+                <Input
+                  value={profileForm.panNumber}
+                  onChange={(e) => setProfileForm((f) => ({ ...f, panNumber: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">VAT number (optional)</label>
+                <Input
+                  value={profileForm.vatNumber}
+                  onChange={(e) => setProfileForm((f) => ({ ...f, vatNumber: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Business address / location</label>
+                <Input
+                  value={profileForm.businessAddress}
+                  onChange={(e) =>
+                    setProfileForm((f) => ({ ...f, businessAddress: e.target.value }))
+                  }
+                  placeholder="Where customers pick up from"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  className="bg-primary hover:bg-primary/90"
+                  disabled={profileMutation.isPending || !profileForm.businessName}
+                  onClick={() => profileMutation.mutate()}
+                >
+                  {profileMutation.isPending ? "Saving…" : "Save Changes"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditingProfile(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm">
+                  <span className="font-semibold">{profile.business_name}</span> · PAN{" "}
+                  {profile.pan_number}
+                  {profile.vat_number && <> · VAT {profile.vat_number}</>}
+                  {profile.business_address && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {profile.business_address}
+                    </div>
+                  )}
+                </div>
+                {profile.status === "approved" && (
+                  <Button size="sm" variant="outline" onClick={startEditingProfile}>
+                    Edit Profile
+                  </Button>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+              <div className="mt-2">
+                {profile.status === "pending" && (
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">
+                    PENDING REVIEW
+                  </span>
+                )}
+                {profile.status === "approved" && (
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">
+                    APPROVED
+                  </span>
+                )}
+                {profile.status === "rejected" && (
+                  <>
+                    <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">
+                      REJECTED
+                    </span>
+                    {profile.rejection_reason && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Reason: {profile.rejection_reason}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </Card>
 
         {profile.status === "approved" && (
           <>
+            <div>
+              <h2 className="font-semibold text-sm mb-3">Income Overview</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <Card className="p-4 border-0 shadow-sm">
+                  <div className="text-xs text-muted-foreground">Today</div>
+                  <div className="text-lg font-bold text-primary mt-1">
+                    NPR {Number(dashSummary?.today ?? 0).toFixed(0)}
+                  </div>
+                </Card>
+                <Card className="p-4 border-0 shadow-sm">
+                  <div className="text-xs text-muted-foreground">This Week</div>
+                  <div className="text-lg font-bold text-primary mt-1">
+                    NPR {Number(dashSummary?.this_week ?? 0).toFixed(0)}
+                  </div>
+                </Card>
+                <Card className="p-4 border-0 shadow-sm">
+                  <div className="text-xs text-muted-foreground">This Month</div>
+                  <div className="text-lg font-bold text-primary mt-1">
+                    NPR {Number(dashSummary?.this_month ?? 0).toFixed(0)}
+                  </div>
+                </Card>
+                <Card className="p-4 border-0 shadow-sm">
+                  <div className="text-xs text-muted-foreground">This Year</div>
+                  <div className="text-lg font-bold text-primary mt-1">
+                    NPR {Number(dashSummary?.this_year ?? 0).toFixed(0)}
+                  </div>
+                </Card>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Card className="p-5 border-0 shadow-sm">
-                <div className="text-xs text-muted-foreground">Total earned</div>
+                <div className="text-xs text-muted-foreground">Total earned (all time)</div>
                 <div className="text-2xl font-bold text-primary mt-1">
                   NPR {Number(earnings?.totals.total_earned ?? 0).toFixed(0)}
                 </div>
@@ -306,12 +550,13 @@ function VendorDashboard() {
             </div>
 
             <Card className="p-5 border-0 shadow-sm">
-              <h2 className="font-semibold text-sm mb-3">Recent bookings</h2>
+              <h2 className="font-semibold text-sm mb-3">Recent bookings & bulk requests</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-muted-foreground border-b">
-                      <th className="py-2 pr-4">Bike</th>
+                      <th className="py-2 pr-4">Bike / Request</th>
+                      <th className="py-2 pr-4">Type</th>
                       <th className="py-2 pr-4">Status</th>
                       <th className="py-2 pr-4 text-right">Total</th>
                       <th className="py-2 pr-4 text-right">Platform fee</th>
@@ -322,6 +567,17 @@ function VendorDashboard() {
                     {earnings?.bookings.map((b) => (
                       <tr key={b.id} className="border-b last:border-0">
                         <td className="py-2 pr-4">{b.bike_name}</td>
+                        <td className="py-2 pr-4">
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              b.source === "bulk"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-primary/15 text-primary"
+                            }`}
+                          >
+                            {b.source === "bulk" ? "BULK" : "BOOKING"}
+                          </span>
+                        </td>
                         <td className="py-2 pr-4 capitalize text-muted-foreground">{b.status}</td>
                         <td className="py-2 pr-4 text-right">
                           NPR {Number(b.total_amount).toFixed(0)}
@@ -338,6 +594,161 @@ function VendorDashboard() {
                 </table>
                 {earnings?.bookings.length === 0 && (
                   <p className="text-sm text-muted-foreground py-4">No bookings yet.</p>
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-5 border-0 shadow-sm">
+              <h2 className="font-semibold text-sm mb-3">Daily Cash Flow</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-muted-foreground border-b">
+                      <th className="py-2 pr-4">Date</th>
+                      <th className="py-2 pr-4 text-right">Bookings</th>
+                      <th className="py-2 pr-4 text-right">Earned</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cashFlow?.map((d) => (
+                      <tr key={d.day} className="border-b last:border-0">
+                        <td className="py-2 pr-4">
+                          {new Date(d.day).toLocaleDateString(undefined, {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </td>
+                        <td className="py-2 pr-4 text-right">{d.booking_count}</td>
+                        <td className="py-2 pr-4 text-right font-semibold text-primary">
+                          NPR {Number(d.earned).toFixed(0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {cashFlow?.length === 0 && (
+                  <p className="text-sm text-muted-foreground py-4">No earnings yet.</p>
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-5 border-0 shadow-sm">
+              <h2 className="font-semibold text-sm mb-3">Bulk Rent Requests</h2>
+              <div className="space-y-3">
+                {bulkRequests?.map((r) => (
+                  <Card key={r.id} className="p-4 border shadow-none">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium text-sm">{r.organization}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {r.customer_name} · {r.contact_email}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {r.bike_count} bikes
+                          {r.event_date
+                            ? ` · Event: ${new Date(r.event_date).toLocaleDateString()}`
+                            : ""}
+                        </div>
+                        {r.notes && (
+                          <div className="text-xs text-muted-foreground mt-1 italic">
+                            "{r.notes}"
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 ${
+                          r.status === "pending"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : r.status === "quoted"
+                              ? "bg-blue-100 text-blue-800"
+                              : r.status === "paid"
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {r.status.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {r.status === "pending" &&
+                      (quotingId === r.id ? (
+                        <div className="mt-3 pt-3 border-t space-y-2">
+                          <Input
+                            type="number"
+                            placeholder="Price per bike (NPR)"
+                            value={quoteForm.price}
+                            onChange={(e) => setQuoteForm((f) => ({ ...f, price: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="Pickup location (optional)"
+                            value={quoteForm.pickup}
+                            onChange={(e) =>
+                              setQuoteForm((f) => ({ ...f, pickup: e.target.value }))
+                            }
+                          />
+                          <textarea
+                            className="w-full border rounded-md p-2 text-sm"
+                            placeholder="Note to customer (optional)"
+                            value={quoteForm.notes}
+                            onChange={(e) => setQuoteForm((f) => ({ ...f, notes: e.target.value }))}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-primary hover:bg-primary/90"
+                              disabled={quoteMutation.isPending || !quoteForm.price}
+                              onClick={() => quoteMutation.mutate(r.id)}
+                            >
+                              Send Quote
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setQuotingId(null)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 mt-3 pt-3 border-t">
+                          <Button
+                            size="sm"
+                            className="bg-primary hover:bg-primary/90"
+                            onClick={() => setQuotingId(r.id)}
+                          >
+                            Send Quote
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            disabled={rejectMutation.isPending}
+                            onClick={() => {
+                              const reason = window.prompt("Reason for declining:");
+                              if (reason && reason.trim()) {
+                                rejectMutation.mutate({ requestId: r.id, reason: reason.trim() });
+                              }
+                            }}
+                          >
+                            Decline
+                          </Button>
+                        </div>
+                      ))}
+
+                    {r.status === "quoted" && (
+                      <div className="mt-3 pt-3 border-t">
+                        <Button
+                          size="sm"
+                          className="bg-primary hover:bg-primary/90"
+                          disabled={markPaidMutation.isPending}
+                          onClick={() => markPaidMutation.mutate(r.id)}
+                        >
+                          Mark as Paid
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
+                ))}
+                {bulkRequests?.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No bulk requests yet.</p>
                 )}
               </div>
             </Card>
@@ -364,6 +775,19 @@ function VendorDashboard() {
                 value={form.price}
                 onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
               />
+              <div>
+                <label className="text-xs text-muted-foreground">
+                  How many of this bike do you have?
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  className="mt-1"
+                  placeholder="e.g. 3"
+                  value={form.quantity}
+                  onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+                />
+              </div>
               <textarea
                 className="w-full border rounded-md p-2 text-sm"
                 placeholder="Short description (optional)"
@@ -415,12 +839,35 @@ function VendorDashboard() {
                         className="w-16 h-16 rounded-md object-cover shrink-0"
                       />
                     )}
-                    <div>
+                    <div className="flex-1">
                       <div className="font-semibold text-sm">{b.name}</div>
                       <div className="text-xs text-muted-foreground capitalize">{b.type}</div>
                       <div className="text-sm font-bold text-primary mt-1">
                         NPR {Number(b.price_per_day).toFixed(0)}/day
                       </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <label className="text-xs text-muted-foreground">In stock:</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="w-16 h-7 text-xs px-2"
+                          value={b.quantity}
+                          onChange={(e) => {
+                            const q = Math.max(0, Number(e.target.value) || 0);
+                            stockMutation.mutate({ ...b, quantity: q });
+                          }}
+                        />
+                        {b.quantity <= 0 && (
+                          <span className="text-[10px] font-semibold bg-red-100 text-red-700 px-2 py-0.5 rounded-full">
+                            OUT OF STOCK
+                          </span>
+                        )}
+                      </div>
+                      {b.currently_rented > 0 && (
+                        <div className="text-[11px] text-muted-foreground mt-1">
+                          {b.currently_rented} currently rented out
+                        </div>
+                      )}
                     </div>
                   </Card>
                 ))}

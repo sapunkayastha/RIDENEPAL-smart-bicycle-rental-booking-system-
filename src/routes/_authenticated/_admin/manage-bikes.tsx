@@ -25,6 +25,8 @@ type BikeRow = {
   description: string | null;
   available: number | boolean;
   specs: string | Record<string, string | number | null> | null;
+  stock_quantity: number;
+  available_stock: number;
 };
 
 type FormState = {
@@ -39,6 +41,7 @@ type FormState = {
   range_km: string;
   gears: string;
   weight_kg: string;
+  stock_quantity: string;
 };
 
 const emptyForm: FormState = {
@@ -53,6 +56,7 @@ const emptyForm: FormState = {
   range_km: "",
   gears: "",
   weight_kg: "",
+  stock_quantity: "1",
 };
 
 function parseSpecs(specs: BikeRow["specs"]) {
@@ -67,9 +71,6 @@ function parseSpecs(specs: BikeRow["specs"]) {
   return specs;
 }
 
-// Resizes/compresses an uploaded image in the browser and returns it as a
-// base64 data URL, so it can be stored directly in bikes.image_url without
-// needing separate file storage.
 function resizeImageToDataUrl(file: File, maxWidth = 900, quality = 0.75): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -141,6 +142,7 @@ function ManageBikes() {
       range_km: specs.range_km != null ? String(specs.range_km) : "",
       gears: specs.gears != null ? String(specs.gears) : "",
       weight_kg: specs.weight_kg != null ? String(specs.weight_kg) : "",
+      stock_quantity: String(bike.stock_quantity ?? 1),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -158,6 +160,7 @@ function ManageBikes() {
       range_km: form.range_km.trim() ? Number(form.range_km) : null,
       gears: form.gears.trim() || null,
       weight_kg: form.weight_kg.trim() ? Number(form.weight_kg) : null,
+      stock_quantity: Math.max(0, Number(form.stock_quantity) || 0),
     };
   }
 
@@ -197,6 +200,7 @@ function ManageBikes() {
           range_km: specs.range_km != null ? Number(specs.range_km) : null,
           gears: specs.gears != null ? String(specs.gears) : null,
           weight_kg: specs.weight_kg != null ? Number(specs.weight_kg) : null,
+          stock_quantity: bike.stock_quantity ?? 1,
         },
       });
     },
@@ -294,6 +298,22 @@ function ManageBikes() {
                 onChange={(e) => setForm({ ...form, price_per_day: e.target.value })}
                 placeholder="450"
               />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">
+                STOCK — HOW MANY OF THIS BIKE?
+              </label>
+              <Input
+                className="mt-1"
+                type="number"
+                min="0"
+                value={form.stock_quantity}
+                onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
+                placeholder="10"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Once all units are booked, this listing shows "Out of Stock".
+              </p>
             </div>
             <div className="md:col-span-2">
               <label className="text-xs text-muted-foreground">PHOTO</label>
@@ -433,9 +453,25 @@ function ManageBikes() {
                         Unavailable
                       </span>
                     )}
+                    {bike.available && bike.available_stock <= 0 && (
+                      <span className="text-[10px] font-semibold bg-destructive/15 text-destructive px-2 py-0.5 rounded-full">
+                        Out of Stock
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     NPR {Number(bike.price_per_day).toFixed(0)}/day
+                  </div>
+                  <div className="text-xs mt-0.5">
+                    {bike.available_stock > 0 ? (
+                      <span className="text-green-700 font-medium">
+                        {bike.available_stock} of {bike.stock_quantity} in stock
+                      </span>
+                    ) : (
+                      <span className="text-destructive font-medium">
+                        0 of {bike.stock_quantity} in stock
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
