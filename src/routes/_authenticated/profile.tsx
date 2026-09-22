@@ -6,8 +6,9 @@ import { SiteHeader } from "@/components/site-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { User, Loader2, ShieldCheck, MailCheck, Calendar, Bike, Wallet } from "lucide-react";
+import { User, Loader2, ShieldCheck, MailCheck, Calendar, Bike, Wallet, Store } from "lucide-react";
 import { getMyProfile, updateMyProfile } from "@/lib/profile.functions";
+import { getMyVendorProfile, updateMyVendorProfile } from "@/lib/vendor.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/profile")({
@@ -24,6 +25,8 @@ const roleLabels: Record<string, string> = {
 function ProfilePage() {
   const fetchProfile = useServerFn(getMyProfile);
   const save = useServerFn(updateMyProfile);
+  const fetchVendorProfile = useServerFn(getMyVendorProfile);
+  const saveVendorProfile = useServerFn(updateMyVendorProfile);
   const qc = useQueryClient();
 
   const { data: profile, isLoading } = useQuery({
@@ -31,8 +34,14 @@ function ProfilePage() {
     queryFn: () => fetchProfile(),
   });
 
+  const { data: vendorProfile } = useQuery({
+    queryKey: ["my-vendor-profile"],
+    queryFn: () => fetchVendorProfile(),
+  });
+
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [shopName, setShopName] = useState("");
 
   useEffect(() => {
     if (profile) {
@@ -41,6 +50,12 @@ function ProfilePage() {
     }
   }, [profile]);
 
+  useEffect(() => {
+    if (vendorProfile) {
+      setShopName(vendorProfile.business_name);
+    }
+  }, [vendorProfile]);
+
   const saveMutation = useMutation({
     mutationFn: () => save({ data: { full_name: fullName, phone } }),
     onSuccess: () => {
@@ -48,6 +63,23 @@ function ProfilePage() {
       qc.invalidateQueries({ queryKey: ["my-profile"] });
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not save changes"),
+  });
+
+  const saveShopMutation = useMutation({
+    mutationFn: () =>
+      saveVendorProfile({
+        data: {
+          businessName: shopName,
+          panNumber: vendorProfile!.pan_number,
+          vatNumber: vendorProfile!.vat_number ?? undefined,
+          businessAddress: vendorProfile!.business_address ?? undefined,
+        },
+      }),
+    onSuccess: () => {
+      toast.success("Shop name updated");
+      qc.invalidateQueries({ queryKey: ["my-vendor-profile"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not save shop name"),
   });
 
   if (isLoading || !profile) {
@@ -159,6 +191,30 @@ function ProfilePage() {
             {saveMutation.isPending ? "Saving…" : "Save Changes"}
           </Button>
         </Card>
+
+        {vendorProfile && vendorProfile.status === "approved" && (
+          <Card className="p-6 border-0 shadow-sm mt-6">
+            <h3 className="font-semibold mb-4 flex items-center gap-2">
+              <Store className="size-4 text-primary" /> Shop Details
+            </h3>
+
+            <label className="text-xs text-muted-foreground">SHOP NAME</label>
+            <Input
+              className="mt-1 mb-4"
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+              placeholder="Your shop's display name"
+            />
+
+            <Button
+              className="bg-primary hover:bg-primary/90"
+              disabled={saveShopMutation.isPending || !shopName.trim()}
+              onClick={() => saveShopMutation.mutate()}
+            >
+              {saveShopMutation.isPending ? "Saving…" : "Save Shop Name"}
+            </Button>
+          </Card>
+        )}
       </main>
     </div>
   );

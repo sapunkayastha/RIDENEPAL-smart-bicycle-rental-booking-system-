@@ -8,16 +8,24 @@ import {
   LogOut,
   ChevronDown,
   Radio,
+  Store,
 } from "lucide-react";
 
 type UserMenuProps = {
   linkCls: string;
   isStaff: boolean;
   isSuperAdmin: boolean;
+  hasVendorProfile: boolean;
   onSignOut: () => void;
 };
 
-export function UserMenu({ linkCls, isStaff, isSuperAdmin, onSignOut }: UserMenuProps) {
+export function UserMenu({
+  linkCls,
+  isStaff,
+  isSuperAdmin,
+  hasVendorProfile,
+  onSignOut,
+}: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -67,6 +75,14 @@ export function UserMenu({ linkCls, isStaff, isSuperAdmin, onSignOut }: UserMenu
             >
               <User className="size-4 text-muted-foreground" /> Profile
             </button>
+            {hasVendorProfile && (
+              <button
+                onClick={() => go("/vendor-dashboard")}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-secondary/50 text-left font-medium text-primary"
+              >
+                <Store className="size-4" /> Vendor Dashboard
+              </button>
+            )}
             {isStaff && (
               <>
                 <button

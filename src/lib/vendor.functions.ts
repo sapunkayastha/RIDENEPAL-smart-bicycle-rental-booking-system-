@@ -540,31 +540,135 @@ export const listVendorReviews = createServerFn({ method: "GET" })
     return rows;
   });
 
+// Single vendor's public storefront page (/vendor/$vendorId) — full bike
+// list with pricing/stock, unlike listVendorStorefronts above which only
+// returns a 3-bike preview for the directory cards.
+export const getVendorStorefront = createServerFn({ method: "GET" })
+  .inputValidator((input: { vendorId: string }) => input)
+  .handler(async ({ data }) => {
+    const pool = await getPool();
+
+    const [vendorRows] = await pool.query(
+      `SELECT vp.user_id AS vendor_id, vp.business_name, vp.business_address
+       FROM vendor_profiles vp
+       WHERE vp.user_id = :vendorId AND vp.status = 'approved'`,
+      { vendorId: data.vendorId },
+    );
+    const vendor = (
+      vendorRows as { vendor_id: string; business_name: string; business_address: string | null }[]
+    )[0];
+    if (!vendor) throw new Error("Vendor not found");
+
+    const [reviewRows] = await pool.query(
+      `SELECT COUNT(*) AS review_count, AVG(rating) AS avg_rating
+       FROM vendor_reviews WHERE vendor_id = :vendorId`,
+      { vendorId: data.vendorId },
+    );
+    const reviewStats = (reviewRows as { review_count: number; avg_rating: number | null }[])[0];
+
+    const [bikeRows] = await pool.query(
+      `SELECT id, name, type, price_per_day, image_url, stock_quantity, available_stock
+       FROM bikes WHERE vendor_id = :vendorId
+       ORDER BY created_at ASC`,
+      { vendorId: data.vendorId },
+    );
+
+    return {
+      businessName: vendor.business_name,
+      location: vendor.business_address,
+      reviewCount: Number(reviewStats?.review_count ?? 0),
+      avgRating: reviewStats?.avg_rating != null ? Number(reviewStats.avg_rating) : null,
+      bikes: bikeRows as {
+        id: string;
+        name: string;
+        type: string;
+        price_per_day: number;
+        image_url: string | null;
+        stock_quantity: number;
+        available_stock: number;
+      }[],
+    };
+  });
+
 // Public directory of approved vendors who have at least one bike
 // listed — used by the bulk-rent "pick a vendor" screen.
 export const listVendorStorefronts = createServerFn({ method: "GET" }).handler(async () => {
   const pool = await getPool();
-  const [rows] = await pool.query(
+
+  // Base: every approved vendor, with bike/stock counts. No longer
+  // filters out vendors with zero bikes — the homepage needs to show
+  // them too (with a "No bikes listed yet" state), so any page that
+  // only wants vendors with stock (like bulk-rent) filters that
+  // client-side instead.
+  const [vendorRows] = await pool.query(
     `SELECT vp.user_id AS vendor_id, vp.business_name, vp.business_address,
-            COUNT(bk.id) AS bike_count
+            COUNT(bk.id) AS bike_count,
+            COALESCE(SUM(CASE WHEN bk.quantity > 0 THEN 1 ELSE 0 END), 0) AS in_stock_count
      FROM vendor_profiles vp
-     JOIN bikes bk ON bk.vendor_id = vp.user_id
+     LEFT JOIN bikes bk ON bk.vendor_id = vp.user_id
      WHERE vp.status = 'approved'
      GROUP BY vp.user_id, vp.business_name, vp.business_address
-     HAVING bike_count > 0
      ORDER BY vp.business_name ASC`,
   );
-  return (
-    rows as {
-      vendor_id: string;
-      business_name: string;
-      business_address: string | null;
-      bike_count: number;
-    }[]
-  ).map((r) => ({
-    vendorId: r.vendor_id,
-    businessName: r.business_name,
-    location: r.business_address,
-    bikeCount: Number(r.bike_count),
+  const vendors = vendorRows as {
+    vendor_id: string;
+    business_name: string;
+    business_address: string | null;
+    bike_count: number;
+    in_stock_count: number;
+  }[];
+  if (vendors.length === 0) return [];
+
+  const vendorIds = vendors.map((v) => v.vendor_id);
+
+  const [reviewRows] = await pool.query(
+    `SELECT vendor_id, COUNT(*) AS review_count, AVG(rating) AS avg_rating
+     FROM vendor_reviews WHERE vendor_id IN (:vendorIds)
+     GROUP BY vendor_id`,
+    { vendorIds },
+  );
+  const reviewsByVendor = new Map(
+    (reviewRows as { vendor_id: string; review_count: number; avg_rating: number }[]).map((r) => [
+      r.vendor_id,
+      { reviewCount: Number(r.review_count), avgRating: Number(r.avg_rating) },
+    ]),
+  );
+
+  const [bikeRows] = await pool.query(
+    `SELECT id, vendor_id, name, image_url, quantity AS available_stock
+     FROM bikes WHERE vendor_id IN (:vendorIds)
+     ORDER BY created_at ASC`,
+    { vendorIds },
+  );
+  const bikesByVendor = new Map<
+    string,
+    { id: string; name: string; image_url: string | null; available_stock: number }[]
+  >();
+  for (const b of bikeRows as {
+    id: string;
+    vendor_id: string;
+    name: string;
+    image_url: string | null;
+    available_stock: number;
+  }[]) {
+    const list = bikesByVendor.get(b.vendor_id) ?? [];
+    list.push({
+      id: b.id,
+      name: b.name,
+      image_url: b.image_url,
+      available_stock: b.available_stock,
+    });
+    bikesByVendor.set(b.vendor_id, list);
+  }
+
+  return vendors.map((v) => ({
+    vendorId: v.vendor_id,
+    businessName: v.business_name,
+    location: v.business_address,
+    bikeCount: Number(v.bike_count),
+    inStockCount: Number(v.in_stock_count),
+    reviewCount: reviewsByVendor.get(v.vendor_id)?.reviewCount ?? 0,
+    avgRating: reviewsByVendor.get(v.vendor_id)?.avgRating ?? null,
+    bikes: (bikesByVendor.get(v.vendor_id) ?? []).slice(0, 3),
   }));
 });

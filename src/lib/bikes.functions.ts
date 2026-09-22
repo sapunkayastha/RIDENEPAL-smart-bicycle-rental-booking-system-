@@ -25,7 +25,7 @@ export const listAvailableBikes = createServerFn({ method: "GET" }).handler(asyn
      FROM bikes bk
      LEFT JOIN users u ON u.id = bk.vendor_id
      LEFT JOIN vendor_profiles vp ON vp.user_id = bk.vendor_id
-     WHERE bk.available = TRUE ORDER BY bk.price_per_day ASC`,
+     WHERE bk.available = TRUE AND bk.available_stock > 0 ORDER BY bk.price_per_day ASC`,
   );
   return rows as (BikeRow & {
     vendor_name: string | null;

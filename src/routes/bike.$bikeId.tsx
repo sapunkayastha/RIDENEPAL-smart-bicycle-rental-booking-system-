@@ -61,7 +61,9 @@ type BikeRow = {
   available: number | boolean;
   quantity: number;
   specs: Record<string, string | number | null> | null;
+  vendor_id?: string | null;
   vendor_name?: string | null;
+  vendor_business_name?: string | null;
 };
 
 const durationOptions = [
@@ -210,7 +212,7 @@ function BikeDetail() {
     queryKey: ["bike", bikeId],
     queryFn: async () => {
       try {
-        return (await fetchBike({ data: { id: bikeId } })) as BikeRow;
+        return (await fetchBike({ data: { id: bikeId } })) as unknown as BikeRow;
       } catch {
         return null;
       }
@@ -338,8 +340,21 @@ function BikeDetail() {
           {bike.available && bike.quantity > 0 && (
             <p className="text-xs text-muted-foreground mb-2">{bike.quantity} available</p>
           )}
-          {bike.vendor_name && (
-            <p className="text-sm text-muted-foreground mb-4">Listed by {bike.vendor_name}</p>
+          {bike.vendor_id ? (
+            <p className="text-sm text-muted-foreground mb-4">
+              Listed by{" "}
+              <Link
+                to="/vendor/$vendorId"
+                params={{ vendorId: bike.vendor_id }}
+                className="text-primary font-medium hover:underline"
+              >
+                {bike.vendor_business_name || bike.vendor_name || "this vendor"}
+              </Link>
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground mb-4">
+              Listed by RIDENEPAL (official fleet)
+            </p>
           )}
           <div className="grid grid-cols-3 gap-3">
             <div className="col-span-2 aspect-[4/3] rounded-lg overflow-hidden bg-muted">

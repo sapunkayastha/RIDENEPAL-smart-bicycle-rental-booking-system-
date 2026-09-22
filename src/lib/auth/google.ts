@@ -1,13 +1,16 @@
 // src/lib/auth/google.ts
 import { OAuth2Client } from "google-auth-library";
 
-const REDIRECT_URI = "http://localhost:8080/auth-callback";
+function getRedirectUri(): string {
+  const origin = (process.env.APP_ORIGIN || "http://localhost:8080").replace(/\/$/, "");
+  return `${origin}/auth-callback`;
+}
 
 export function getGoogleClient() {
   return new OAuth2Client(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    REDIRECT_URI,
+    getRedirectUri(),
   );
 }
 

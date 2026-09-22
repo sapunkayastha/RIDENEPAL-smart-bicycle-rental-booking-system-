@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { myRole, logout } from "@/lib/auth.functions";
 import { me } from "@/lib/auth.functions";
+import { getMyVendorProfile } from "@/lib/vendor.functions";
 import { UserMenu } from "@/components/user-menu";
 import { NotificationBell } from "@/components/notification-bell";
 import { useNavigate } from "@tanstack/react-router";
@@ -11,6 +12,7 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
   const navigate = useNavigate();
   const fetchMe = useServerFn(me);
   const fetchRole = useServerFn(myRole);
+  const fetchVendorProfile = useServerFn(getMyVendorProfile);
   const doLogout = useServerFn(logout);
 
   const { data: user } = useQuery({
@@ -22,6 +24,13 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
   const { data: roleFlags } = useQuery({
     queryKey: ["my-role"],
     queryFn: () => fetchRole(),
+    enabled: Boolean(user),
+    retry: false,
+  });
+
+  const { data: vendorProfile } = useQuery({
+    queryKey: ["my-vendor-profile"],
+    queryFn: () => fetchVendorProfile(),
     enabled: Boolean(user),
     retry: false,
   });
@@ -84,6 +93,7 @@ export function SiteHeader({ transparent = false }: { transparent?: boolean }) {
                 linkCls={linkCls}
                 isStaff={roleFlags?.isStaff ?? false}
                 isSuperAdmin={roleFlags?.isSuperAdmin ?? false}
+                hasVendorProfile={Boolean(vendorProfile)}
                 onSignOut={handleSignOut}
               />
             </>

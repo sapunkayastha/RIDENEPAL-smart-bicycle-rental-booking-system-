@@ -76,6 +76,9 @@ CREATE TABLE bookings (
   INDEX idx_user (user_id),
   INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+ALTER TABLE bookings
+  ADD COLUMN IF NOT EXISTS platform_commission DECIMAL(10,2) NULL,
+  ADD COLUMN IF NOT EXISTS vendor_payout DECIMAL(10,2) NULL;
 
 -- PAYMENTS
 CREATE TABLE payments (
@@ -189,6 +192,17 @@ CREATE TABLE notifications (
   `read` BOOLEAN NOT NULL DEFAULT FALSE,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- PLATFORM SETTINGS (commission rate used to split every paid booking
+-- between the platform and the vendor — read/written by
+-- commission.functions.ts, payments.functions.ts, vendor.functions.ts)
+CREATE TABLE IF NOT EXISTS platform_settings (
+  id INT PRIMARY KEY,
+  commission_rate DECIMAL(5,2) NOT NULL DEFAULT 15,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO platform_settings (id, commission_rate) VALUES (1, 15);
 
 -- FEEDBACK / SUPPORT MESSAGES (previously its own database, now merged in)
 CREATE TABLE IF NOT EXISTS feedback_messages (
